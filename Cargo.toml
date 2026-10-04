@@ -1,0 +1,35 @@
+[package]
+name = "webizen-os-shell"
+version = "0.0.40"
+edition = "2021"
+authors = ["Timothy Charles Holborn <timothy.holborn@gmail.com>"]
+description = "Sovereign Webizen OS-Shell desktop & web portal built in pure Dioxus"
+
+[dependencies]
+dioxus = { version = "=0.8.0-alpha.1", default-features = false }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+futures-util = "0.3"
+chrono = "0.4"
+uuid = { version = "1.24", features = ["v4"] }
+log = "0.4"
+
+# QualiaDB engine & cooperative core
+qualia-core-db = { path = "../qualiaDB/crates/qualia-core-db", default-features = true }
+qualia-cooperative-core = { path = "../qualiaDB/crates/qualia-cooperative-core" }
+
+[features]
+default = ["desktop"]
+desktop = ["dioxus/desktop"]
+web = ["dioxus/web"]
+
+[patch.crates-io]
+dioxus = { git = "https://github.com/DioxusLabs/dioxus.git", rev = "0dbfab5274abd3628b0558f909b5946e783dbc65" }
+dioxus-core = { git = "https://github.com/DioxusLabs/dioxus.git", rev = "0dbfab5274abd3628b0558f909b5946e783dbc65" }
+dioxus-desktop = { git = "https://github.com/DioxusLabs/dioxus.git", rev = "0dbfab5274abd3628b0558f909b5946e783dbc65" }
+dioxus-document = { git = "https://github.com/DioxusLabs/dioxus.git", rev = "0dbfab5274abd3628b0558f909b5946e783dbc65" }
+dioxus-html = { git = "https://github.com/DioxusLabs/dioxus.git", rev = "0dbfab5274abd3628b0558f909b5946e783dbc65" }
+dioxus-hooks = { git = "https://github.com/DioxusLabs/dioxus.git", rev = "0dbfab5274abd3628b0558f909b5946e783dbc65" }
+dioxus-router = { git = "https://github.com/DioxusLabs/dioxus.git", rev = "0dbfab5274abd3628b0558f909b5946e783dbc65" }
+dioxus-signals = { git = "https://github.com/DioxusLabs/dioxus.git", rev = "0dbfab5274abd3628b0558f909b5946e783dbc65" }
+dioxus-web = { git = "https://github.com/DioxusLabs/dioxus.git", rev = "0dbfab5274abd3628b0558f909b5946e783dbc65" }
