@@ -6,7 +6,7 @@ authors = ["Timothy Charles Holborn <timothy.holborn@gmail.com>"]
 description = "Sovereign Webizen OS-Shell desktop & web portal built in pure Dioxus"
 
 [dependencies]
-dioxus = { version = "=0.8.0-alpha.1", default-features = false }
+dioxus = { version = "=0.8.0-alpha.1", features = ["router"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 futures-util = "0.3"
@@ -18,10 +18,11 @@ log = "0.4"
 qualia-core-db = { path = "../qualiaDB/crates/qualia-core-db", default-features = true }
 qualia-cooperative-core = { path = "../qualiaDB/crates/qualia-cooperative-core" }
 
-[features]
-default = ["desktop"]
-desktop = ["dioxus/desktop"]
-web = ["dioxus/web"]
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+dioxus = { version = "=0.8.0-alpha.1", features = ["desktop", "router"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+dioxus = { version = "=0.8.0-alpha.1", features = ["web", "router"] }
 
 [patch.crates-io]
 dioxus = { git = "https://github.com/DioxusLabs/dioxus.git", rev = "0dbfab5274abd3628b0558f909b5946e783dbc65" }
