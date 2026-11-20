@@ -1,7 +1,10 @@
+# C1 launches Aether native (see Aether.toml). This file is a leftover CLI name
+# from the Dioxus-era pin; window title is set in src/main.rs via Config.
 [application]
 name = "webizen-os-shell"
-default_platform = "desktop"
+default_platform = "native"
 asset_dir = "assets"
 
-[desktop]
+[native]
 title = "Webizen OS-Shell"
+

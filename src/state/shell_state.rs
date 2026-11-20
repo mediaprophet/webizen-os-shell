@@ -29,7 +29,7 @@ impl Default for ShellState {
             p2p_peers_count: 3,
             nym_mixnet_active: true,
             spatial_mode: true,
-            did_fingerprint: "did:q42:webizen:human-sovereign-01".into(),
+            did_fingerprint: "did:q42:webizen:guest-01".into(),
         }
     }
 }

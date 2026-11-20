@@ -1,4 +1,4 @@
-use dioxus::prelude::*;
+use aether::prelude::*;
 use crate::state::ShellState;
 
 #[component]
@@ -11,7 +11,9 @@ pub fn HaloBar(state: Signal<ShellState>) -> Element {
             div {
                 style: "display: flex; align-items: center; gap: 12px;",
                 span { style: "font-weight: 700; letter-spacing: 0.05em; font-size: 15px; color: #38bdf8;", "WEBIZEN OS" }
-                span { style: "font-size: 11px; padding: 2px 8px; border-radius: 9999px; background: rgba(56, 189, 248, 0.15); color: #38bdf8;", "SPATIAL HALO" }
+                if s.spatial_mode {
+                    span { style: "font-size: 11px; padding: 2px 8px; border-radius: 9999px; background: rgba(56, 189, 248, 0.15); color: #38bdf8;", "SPATIAL HALO" }
+                }
             }
             div {
                 style: "display: flex; align-items: center; gap: 20px; font-size: 13px;",

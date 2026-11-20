@@ -1,0 +1,7 @@
+[application]
+name = "webizen-os-shell"
+default_platform = "native"
+asset_dir = "assets"
+
+[native]
+title = "Webizen OS-Shell"

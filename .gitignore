@@ -1,4 +1,5 @@
 target/
+/target-c1/
 Cargo.lock
 dist/
 *.qpkg

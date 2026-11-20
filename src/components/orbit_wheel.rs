@@ -1,13 +1,13 @@
-use dioxus::prelude::*;
+use aether::prelude::*;
 use crate::state::{ShellState, VolumeStage};
 
 const ITEMS: &[(&str, VolumeStage, &str, &str)] = &[
     ("Talk", VolumeStage::Talk, "💬", "Encrypted Mesh Voice & Chat"),
     ("Mail", VolumeStage::Mail, "✉️", "Asynchronous Semantic Mail"),
     ("Directory", VolumeStage::Directory, "👥", "Identity & Peer Ledger"),
-    ("Wallet", VolumeStage::Wallet, "💳", "Multi-Rail Sovereign Vault"),
+    ("Wallet", VolumeStage::Wallet, "💳", "Multi-Rail Vault"),
     ("Wellfair", VolumeStage::Wellfair, "🩺", "Clinical Health & Welfare"),
-    ("Library", VolumeStage::Library, "📚", "Sovereign Hypermedia Vault"),
+    ("Library", VolumeStage::Library, "📚", "Hypermedia Vault"),
     ("Projects", VolumeStage::Projects, "⚙️", "Cooperative Tasks & DAG"),
     ("Settings", VolumeStage::Settings, "🛠️", "Hardware, Privacy & Models"),
 ];

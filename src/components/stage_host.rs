@@ -1,4 +1,4 @@
-use dioxus::prelude::*;
+use aether::prelude::*;
 use crate::state::{ShellState, VolumeStage};
 
 #[component]
@@ -11,7 +11,7 @@ pub fn StageHost(mut state: Signal<ShellState>) -> Element {
     let title = match current {
         VolumeStage::Talk => "Webizen Talk · Encrypted Comms",
         VolumeStage::Mail => "Webizen Mail · Semantic Inbound",
-        VolumeStage::Directory => "Webizen Directory · Sovereign Graph",
+        VolumeStage::Directory => "Webizen Directory · Graph",
         VolumeStage::Wallet => "Webizen Wallet · Multi-Rail Vault",
         VolumeStage::Wellfair => "Webizen Wellfair · Clinical & Health",
         VolumeStage::Library => "Webizen Library · Hypermedia Keep",
@@ -43,7 +43,7 @@ pub fn StageHost(mut state: Signal<ShellState>) -> Element {
                 div {
                     style: "max-width: 800px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px;",
                     p { style: "font-size: 14px; line-height: 1.6;",
-                        "This stage is powered by the standalone QApp package rewired to the QualiaDB zero-copy semantic engine."
+                        "Placeholder stage (C1). QualiaDB Qap install and the native-RSX card arrive at C2."
                     }
                     div {
                         style: "background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 12px; padding: 18px;",

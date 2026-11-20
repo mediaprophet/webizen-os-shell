@@ -3,34 +3,23 @@ name = "webizen-os-shell"
 version = "0.0.40"
 edition = "2021"
 authors = ["Timothy Charles Holborn <timothy.holborn@gmail.com>"]
-description = "Sovereign Webizen OS-Shell desktop & web portal built in pure Dioxus"
+description = "Webizen OS-Shell Guest chrome: Aether native HaloBar/OrbitWheel (C1). Qualia returns at C2."
+
+[features]
+default = ["native"]
+# CPU softbuffer paint. Renderer features live on the aether-native path pin.
+native = []
 
 [dependencies]
-dioxus = { version = "=0.8.0-alpha.1", features = ["router"] }
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-futures-util = "0.3"
-chrono = "0.4"
-uuid = { version = "1.24", features = ["v4"] }
-log = "0.4"
+aether = { path = "../../Aether/packages/aether", default-features = false, features = ["macro", "html", "signals", "hooks", "launch", "native"] }
+aether-native = { path = "../../Aether/packages/native", default-features = false, features = ["vello-cpu-softbuffer", "system-fonts", "clipboard", "accessibility", "html"] }
 
-# QualiaDB engine & cooperative core
-qualia-core-db = { path = "../qualiaDB/crates/qualia-core-db", default-features = true }
-qualia-cooperative-core = { path = "../qualiaDB/crates/qualia-cooperative-core" }
+# Qualia crates return at C2 (`qualia-client-core` via relative `../../qualiaDB/...`).
+# Do not path-pin `../qualiaDB` from this tree; that directory does not exist.
 
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-dioxus = { version = "=0.8.0-alpha.1", features = ["desktop", "router"] }
-
-[target.'cfg(target_arch = "wasm32")'.dependencies]
-dioxus = { version = "=0.8.0-alpha.1", features = ["web", "router"] }
-
+# Aether workspace patches do not apply to this package. Match B1a vendor Blitz
+# (CompletionHandler / NetError live there, not on crates.io 0.3.0-beta.4).
 [patch.crates-io]
-dioxus = { git = "https://github.com/DioxusLabs/dioxus.git", rev = "0dbfab5274abd3628b0558f909b5946e783dbc65" }
-dioxus-core = { git = "https://github.com/DioxusLabs/dioxus.git", rev = "0dbfab5274abd3628b0558f909b5946e783dbc65" }
-dioxus-desktop = { git = "https://github.com/DioxusLabs/dioxus.git", rev = "0dbfab5274abd3628b0558f909b5946e783dbc65" }
-dioxus-document = { git = "https://github.com/DioxusLabs/dioxus.git", rev = "0dbfab5274abd3628b0558f909b5946e783dbc65" }
-dioxus-html = { git = "https://github.com/DioxusLabs/dioxus.git", rev = "0dbfab5274abd3628b0558f909b5946e783dbc65" }
-dioxus-hooks = { git = "https://github.com/DioxusLabs/dioxus.git", rev = "0dbfab5274abd3628b0558f909b5946e783dbc65" }
-dioxus-router = { git = "https://github.com/DioxusLabs/dioxus.git", rev = "0dbfab5274abd3628b0558f909b5946e783dbc65" }
-dioxus-signals = { git = "https://github.com/DioxusLabs/dioxus.git", rev = "0dbfab5274abd3628b0558f909b5946e783dbc65" }
-dioxus-web = { git = "https://github.com/DioxusLabs/dioxus.git", rev = "0dbfab5274abd3628b0558f909b5946e783dbc65" }
+blitz-traits = { path = "../../Aether/vendor/blitz/blitz-traits" }
+blitz-dom = { path = "../../Aether/vendor/blitz/blitz-dom" }
+blitz-net = { path = "../../Aether/vendor/blitz/blitz-net" }
