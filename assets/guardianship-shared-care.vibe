@@ -1,0 +1,48 @@
+requires [capability("capability.invoke")];
+let layout={
+  viewport_width:1024,
+  viewport_height:640,
+  boxes:[
+    {id:"halo",role:"sidebar",label:"WEBIZEN\nWellFair\n\n[3 Circles]\n1. ShareHouse\n2. Family CRC\n3. Elderly Care\n\n[Alerts]\nQDNF WireGuard\nSeverity 0..3\nReversible OK\nLedger Audit",x:0,y:0,width:116,height:600,state:"active"},
+    {id:"header",role:"header",label:"SHARED SYSTEMS, RELATIONAL GUARDIANSHIP (UN CRC / CRPD) & REMOTE CARER QDNF ALERTS",x:126,y:8,width:888,height:36,state:"active"},
+    {id:"premise",role:"panel",label:"SUPPORTED AGENCY, NOT SURVEILLANCE OR WARDEN CONTROL  (wellfare-core + ingest_guardian + duty_of_inquiry)\n1. Share-Houses: Equal adult peers share a Home Server / solar utility quorum (M-of-N) with ZERO guardianship over each other's vaults.\n2. Families & Elderly Care: Scoped, severity-gated alerts travel over QDNF to guardians/remote carers and log to AccountabilityLedger.",x:126,y:50,width:888,height:80,state:"default"},
+    {id:"c1",role:"card",label:"1. Share-House Co-Living\n(Zero Peer Guardianship)\n\n4 Equal Adult Housemates\n310k PBKDF2 + HKDF Lanes\nHardware Owner != Warden\nM-of-N Utility/Solar Quorum\nPersonal Health Spying Denied",x:126,y:138,width:288,height:164,state:"default"},
+    {id:"c2",role:"card",label:"2. Family with Children\n(UN CRC AgencyStage Gradient)\n\nChild Owns DigitalBirthRecord\nNever Collapsed into Parent\nSplit StewardRoles (Medical,\nPrimaryCare, Legal, Edu)\nFlagged-Ingest Guardian Alert",x:426,y:138,width:288,height:164,state:"hover"},
+    {id:"c3",role:"card",label:"3. Elderly & Remote Carers\n(UN CRPD Supported Agency)\n\nPrincipal at Home Server\nDaughter & Nurse Elsewhere\nHeartbeat / Meds / Fall Alert\nReversible 'I am OK' Check-In\nRevocable ConsentCredential",x:726,y:138,width:288,height:164,state:"focus"},
+    {id:"routing",role:"panel",label:"SEVERITY-GATED REMOTE ALERT ROUTING OVER QDNF  (GuardianNotification · Severity 0 Info .. 3 Urgent)\n• Elderly Parent at Home (did:qi:principal:elderly-parent-at-home) -> Sanctuary Keep diary stays 100% private on Home Server (:8080)\n• Remote Daughter in Melbourne (Mobile Debian 13 AVF pKVM) -> Subscribed to Severity >= 1 (Notice/Concern/Urgent: Meds, Heartbeat, Falls)\n• Visiting Community Nurse (Remote Clinic) -> Subscribed to Severity >= 2 (Concern/Urgent) under DutyOfInquiry (Diligent vs Negligent)",x:126,y:310,width:888,height:132,state:"focus"},
+    {id:"ledger",role:"panel",label:"TAMPER-EVIDENT ACCOUNTABILITY LEDGER & REVERSIBLE ESCALATION  (48-Byte NQuin48 Receipts)\n[URGENT · Lv 3] Elderly Liveness Heartbeat Lapse (12h) -> Notified Daughter & Nurse over QDNF · [REVERSED: Principal tapped 'I am OK']\n[CONCERN · Lv 2] Child Flagged-Content Ingest -> Notified Parent A & Escrowed Proxy Write (GuardianshipProposal M-of-N + Veto)\n[DENIED · Share-House Fence] Attempt to subscribe to Housemate Sam's vitals/heartbeat -> PermissionDenied (Zero Peer Guardianship)",x:126,y:450,width:888,height:140,state:"active"},
+    {id:"footer",role:"footer",label:"Share-House Peer Isolation  ·  UN CRC Child AgencyStage Gradient  ·  UN CRPD Remote Carer Alerts & Reversible Check-In",x:0,y:600,width:1024,height:40,state:"default"}
+  ]
+};
+let theme = capability.invoke("hypermedia.layout.bind_theme_scope", {
+  scope:"environment",
+  mode:"holosonic-dark",
+  accent:[77,184,255,255],
+  corner_radius:16.0
+});
+let ui = capability.invoke("hypermedia.layout.render_ui_sheet", {layout:layout,theme:theme,font:"ui-font.ttf",scale:1.0});
+let png = capability.invoke("hypermedia.radiance.encode_rgba_png", {image:ui});
+let svg = capability.invoke("hypermedia.layout.project_ui_svg", {layout:layout,theme:theme,font:"ui-font.ttf",scale:1.0});
+let diegetic = capability.invoke("hypermedia.layout.project_diegetic_surface", {
+  ui_image:ui,
+  viewport_width:1024,
+  viewport_height:640,
+  yaw_deg:-5.0,
+  pitch_deg:4.0,
+  pick_screen_xy:[512.0,320.0]
+});
+let diegeticPng = capability.invoke("hypermedia.radiance.encode_rgba_png", {image:diegetic.projected_rgba});
+let gallery = capability.invoke("hypermedia.discourse.review_gallery", {
+  title:"Shared Systems, Relational Guardianship (UN CRC / CRPD) & Remote Carer QDNF Alerts",
+  files:[
+    {name:"guardianship-care-sheet.png",resource:png},
+    {name:"guardianship-care-sheet.svg",resource:svg},
+    {name:"guardianship-care-diegetic.png",resource:diegeticPng}
+  ]
+});
+let asset={files:[
+  {key:"guardianship-care-sheet.png",resource:png},
+  {key:"guardianship-care-sheet.svg",resource:svg},
+  {key:"guardianship-care-diegetic.png",resource:diegeticPng},
+  {key:"review-gallery.html",resource:gallery}
+]};

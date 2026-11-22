@@ -1,0 +1,48 @@
+requires [capability("capability.invoke")];
+let layout={
+  viewport_width:1024,
+  viewport_height:640,
+  boxes:[
+    {id:"halo",role:"sidebar",label:"WEBIZEN\nSteward\n\n[3 .deb]\n1. Desktop\n2. Mobile AVF\n3. Host VPS\n\n[Quorum]\nM-of-N = 2/3\nBFT f = 1\n0x32 Dissent\nNo Bot Vote",x:0,y:0,width:116,height:600,state:"active"},
+    {id:"header",role:"header",label:"NATURAL-PERSON & M-OF-N QUORUM HOST STEWARDSHIP  ·  TRI-TARGET DEBIAN 13 (TRIXIE) .DEB SUITE",x:126,y:8,width:888,height:36,state:"active"},
+    {id:"premise",role:"panel",label:"HUMAN-CENTRIC HOST GOVERNANCE  (webizen-host never updates via unilateral bot/vendor push)\nResponsible Principal: Living Natural Person (NaturalAgent / living-SHACL, disjoint from owl:Thing) or M-of-N Cooperative Quorum\nSanctuary Split: Sanctuary Keep stays on local Desktop & Mobile AVF (:8080); Host VPS (:4242) holds 2-of-3 Shamir .q42j backups",x:126,y:50,width:888,height:80,state:"default"},
+    {id:"deb1",role:"card",label:"TARGET 1: Desktop Steward\n(webizen-desktop-appliance.deb)\n\nDebian 13 Trixie amd64 / arm64\nWayland Cage + Etalon Vulkan\nFour-Plane Identifier Fabric\nPoet + 150-Morphism Synth\nPrimary Quorum Signer (:8080)",x:126,y:138,width:288,height:164,state:"default"},
+    {id:"deb2",role:"card",label:"TARGET 2: Mobile AVF Sanctuary\n(webizen-mobile-avf.deb)\n\nDebian 13 arm64 in Android 16\npKVM EL2 Hardware Sanctuary\nDICE pvmfw -> anvil NP64 root\nvirtio-gpu gfxstream Vulkan\nPocket M-of-N Quorum Co-Signer",x:426,y:138,width:288,height:164,state:"hover"},
+    {id:"deb3",role:"card",label:"TARGET 3: Linux Host Platform\n(webizen-hostd.deb)\n\nDebian 13 Trixie VPS / Server\nO(1) 48B NQuin DNS + QPolicy\nns.webcivics.net + Solid Pod\nhost_state.cbor-ld (0xD90501)\nwebizen-host-apply-update Gate",x:726,y:138,width:288,height:164,state:"focus"},
+    {id:"stewards",role:"panel",label:"MULTI-LOCUS FLEET (Home Server · 12V Camper Rig · Online VPS) & RUNTIME != PROJECT OWNERSHIP\n[Locus Fleet] 1. Home Server (Standalone LAN + Keep)  ·  2. 12V Camper Rig (Offline Field Mesh)  ·  3. Online VPS (Shamir .q42j Mirror)\n[Project != Runtime] Personal Project -> Evolves to M-of-N Group Project  ·  Mutual-Aid Hosting of Another Group's Project -> Q-CDN Swarm",x:126,y:310,width:888,height:132,state:"focus"},
+    {id:"queue",role:"panel",label:"3-WAY JURAL PERSONALITY & MANDATORY COMMERCIAL LICENSING FOR INCORPORATED ENTITIES\n1. NaturalPersonPrincipal (living-SHACL): $0.00 Free Human-Centric Commons Lane (Unincorporated Person / Family / Group)\n2. NaturalPersonAgentOfIncorporatedEntity: Explicit Principal-Agent Binding -> Charged at Corporate Commercial Tier (No Fee Evasion)\n3. IncorporatedLegalEntity (Board/Shareholder Stakeholder Personality != Users): Always Charged (Tier 1 NFP $49 .. Tier 4 $2,499/mo)",x:126,y:450,width:888,height:140,state:"active"},
+    {id:"footer",role:"footer",label:"Tri-Target Debian 13 Trixie (.deb)  ·  Android 16 AVF pKVM EL2 Sanctuary  ·  M-of-N Natural-Person Host Update Gate",x:0,y:600,width:1024,height:40,state:"default"}
+  ]
+};
+let theme = capability.invoke("hypermedia.layout.bind_theme_scope", {
+  scope:"environment",
+  mode:"holosonic-dark",
+  accent:[77,184,255,255],
+  corner_radius:16.0
+});
+let ui = capability.invoke("hypermedia.layout.render_ui_sheet", {layout:layout,theme:theme,font:"ui-font.ttf",scale:1.0});
+let png = capability.invoke("hypermedia.radiance.encode_rgba_png", {image:ui});
+let svg = capability.invoke("hypermedia.layout.project_ui_svg", {layout:layout,theme:theme,font:"ui-font.ttf",scale:1.0});
+let diegetic = capability.invoke("hypermedia.layout.project_diegetic_surface", {
+  ui_image:ui,
+  viewport_width:1024,
+  viewport_height:640,
+  yaw_deg:-5.0,
+  pitch_deg:4.0,
+  pick_screen_xy:[512.0,320.0]
+});
+let diegeticPng = capability.invoke("hypermedia.radiance.encode_rgba_png", {image:diegetic.projected_rgba});
+let gallery = capability.invoke("hypermedia.discourse.review_gallery", {
+  title:"Natural-Person & M-of-N Quorum Host Stewardship — Tri-Target Debian 13 (Trixie) .deb Suite",
+  files:[
+    {name:"host-stewardship-sheet.png",resource:png},
+    {name:"host-stewardship-sheet.svg",resource:svg},
+    {name:"host-stewardship-diegetic.png",resource:diegeticPng}
+  ]
+});
+let asset={files:[
+  {key:"host-stewardship-sheet.png",resource:png},
+  {key:"host-stewardship-sheet.svg",resource:svg},
+  {key:"host-stewardship-diegetic.png",resource:diegeticPng},
+  {key:"review-gallery.html",resource:gallery}
+]};

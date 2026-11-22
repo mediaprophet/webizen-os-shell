@@ -1,25 +1,65 @@
+[workspace]
+members = [".", "crates/webizen-ua-os"]
+resolver = "2"
+
 [package]
 name = "webizen-os-shell"
 version = "0.0.40"
 edition = "2021"
 authors = ["Timothy Charles Holborn <timothy.holborn@gmail.com>"]
-description = "Webizen OS-Shell Guest chrome: Aether native HaloBar/OrbitWheel (C1). Qualia returns at C2."
+license = "CC-BY-NC-ND-4.0"
+description = "Webizen OS-Shell: Aether native spatial shell on Etalon native GPU with integrated QualiaDB, Poet, and Hypermedia runtime."
 
 [features]
 default = ["native"]
-# CPU softbuffer paint. Renderer features live on the aether-native path pin.
-native = []
+# Chrome GPU is Etalon Vulkan/DX12 via aether-native vello-hybrid (64-bit host).
+# Do not enable vello-cpu-softbuffer alongside hybrid: CPU overrides hybrid in aether-native.
+native = ["dep:aether", "dep:aether-native", "dep:etalon", "dep:tray-icon", "dep:anyrender", "dep:peniko", "dep:kurbo", "dep:blitz-dom", "dep:blitz-traits"]
+chora = ["native", "aether-native/chora", "dep:url"]
+gpu-cpu-fallback = ["native", "aether-native/gpu-cpu-fallback"]
+
+[[bin]]
+name = "webizen-os-shell"
+path = "src/main.rs"
+required-features = ["native"]
+
+[[bin]]
+name = "webizen-hostd"
+path = "src/bin/webizen-hostd.rs"
 
 [dependencies]
-aether = { path = "../../Aether/packages/aether", default-features = false, features = ["macro", "html", "signals", "hooks", "launch", "native"] }
-aether-native = { path = "../../Aether/packages/native", default-features = false, features = ["vello-cpu-softbuffer", "system-fonts", "clipboard", "accessibility", "html"] }
+aether = { optional = true, path = "../../Aether/packages/aether", default-features = false, features = ["macro", "html", "signals", "hooks", "launch", "native", "refract"] }
+aether-native = { optional = true, path = "../../Aether/packages/native", default-features = false, features = ["vello-hybrid", "system-fonts", "clipboard", "accessibility", "html"] }
+# Feature-unify Etalon backends onto the local 0.0.41.3 tree (Vulkan + DX12 native GPU).
+etalon = { optional = true, git = "https://github.com/mediaprophet/etalon.git", rev = "a8f12b3f769fe7c8f33c6b93fece6aa046f6db16", default-features = false, features = ["std", "vulkan", "dx12", "wgsl"] }
 
-# Qualia crates return at C2 (`qualia-client-core` via relative `../../qualiaDB/...`).
-# Do not path-pin `../qualiaDB` from this tree; that directory does not exist.
+webizen-ua-os = { path = "crates/webizen-ua-os" }
+tray-icon = { optional = true, version = "0.26.1", default-features = false }
+serde_json = "1.0"
+anyrender = { version = "0.14.0", optional = true }
+peniko = { version = "0.6.1", optional = true }
+kurbo = { version = "0.13.1", optional = true }
+blitz-dom = { version = "=0.3.0-beta.4", default-features = false, optional = true }
+blitz-traits = { version = "=0.3.0-beta.4", optional = true }
+url = { version = "2.5", optional = true }
 
-# Aether workspace patches do not apply to this package. Match B1a vendor Blitz
-# (CompletionHandler / NetError live there, not on crates.io 0.3.0-beta.4).
 [patch.crates-io]
 blitz-traits = { path = "../../Aether/vendor/blitz/blitz-traits" }
 blitz-dom = { path = "../../Aether/vendor/blitz/blitz-dom" }
 blitz-net = { path = "../../Aether/vendor/blitz/blitz-net" }
+
+[patch."https://github.com/mediaprophet/etalon.git"]
+etalon = { path = "../../etalon/etalon" }
+etalon-vibe = { path = "../../etalon/crates/etalon-vibe" }
+etalon-nquin = { path = "../../etalon/crates/etalon-nquin" }
+etalon-resources = { path = "../../etalon/crates/etalon-resources" }
+etalon-sense-core = { path = "../../etalon/crates/etalon-sense-core" }
+etalon-signal = { path = "../../etalon/crates/etalon-signal" }
+etalon-wgsl-forge = { path = "../../etalon/crates/etalon-wgsl-forge" }
+
+[patch."https://github.com/mediaprophet/vibe-script.git"]
+vibescript-abi = { path = "../../qualiaDB/crates/vibescript-abi" }
+
+[patch."https://github.com/mediaprophet/hypermedia-production.git"]
+vector-hybrid-render-adapter = { path = "../../hypermedia-production/crates/vector-hybrid-render-adapter" }
+gpu-device-context = { path = "../../hypermedia-production/crates/gpu-device-context" }

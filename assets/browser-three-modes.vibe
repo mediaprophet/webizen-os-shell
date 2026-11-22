@@ -1,0 +1,48 @@
+requires [capability("capability.invoke")];
+let layout={
+  viewport_width:1024,
+  viewport_height:640,
+  boxes:[
+    {id:"halo",role:"sidebar",label:"WEBIZEN\nBrowser\n\n[3 Modes]\n1. Old-Web\n2. Qualia 10D\n3. Hybrid\n\n[Product]\nQap: Browser\nv0.1.0->0.1.1\nIndependent\nEd25519\nHot-Swap",x:0,y:0,width:116,height:600,state:"active"},
+    {id:"header",role:"header",label:"WEBIZEN WEB BROWSER  ·  BUNDLED INDEPENDENT PRODUCT (did:qualia:qap:browser)  ·  3-MODE ENGINE",x:126,y:8,width:888,height:36,state:"active"},
+    {id:"pkg",role:"panel",label:"PACKAGED WITH OS-SHELL, UPDATED INDEPENDENTLY  (storage/Qapps/Browser + www-engine-worker)\nProduct DID: did:qualia:qap:browser  ·  Repo: did:git:github.com/WebizenAI/webizen-browser  ·  Version: v0.1.0 -> v0.1.1 (Hot-Swap)\nChannel: updates.webizen.org/qapps/browser/manifest.ed25519.json  ·  Leases: scheduler, networking, permissive_commons, identifiers",x:126,y:50,width:888,height:84,state:"default"},
+    {id:"m1",role:"card",label:"MODE 1: Traditional Web\n(Old-Web Compatibility)\n\nhttp:// & https:// HTML/CSS/JS\nRing C webizen-WWW-engine\nMPL-2.0 sibling worker\nPQ TLS X25519MLKEM768\nZero Host Vault Access",x:126,y:142,width:288,height:164,state:"default"},
+    {id:"m2",role:"card",label:"MODE 2: QualiaDB Native\n(Human-Centric Web)\n\nqualia:// & webizen:// (.10d/.hmc)\nRing B Aether + Etalon Vulkan\n10D v2 HOLO (0x0306) raymarch\nVibeScript (Zero V8 / Zero JS)\n42 MiB SlgArena Sentinel",x:426,y:142,width:288,height:164,state:"hover"},
+    {id:"m3",role:"card",label:"MODE 3: Hybrid Augmented\n(Qualia Capabilities in Web)\n\nTraditional https:// + Bridge\nControl::PageRequest -> Gate\n42 MiB Sentinel + LeaseSheet\n48-Byte NQuin48 Audit Receipt\nIn-Page <qualia-10d> & QECP",x:726,y:142,width:288,height:164,state:"focus"},
+    {id:"bridge",role:"panel",label:"MODE 3 HYBRID BRIDGE CHANNELS  (QualiaDB-Powered Capabilities Embedded in Traditional Web Pages)\n1. qualia.identity.contextual_did (Origin-bound pairwise handle · Master collapse refused)\n2. qualia.10d.mount_holo_embed (In-page <qualia-10d> upgraded to Etalon Native Vulkan 10D v2 HOLO 0x0306 viewport)\n3. qualia.rdf.extract_to_semantic_fs (Extracts page RDFa / JSON-LD / CML into 48-byte NQuin48 Semantic File-System)\n4. qualia.qecp.verify_c2pa (In-page QECP C2PA + ML-DSA-65 credential verifier)  ·  5. qualia.solid.pod_sync  ·  6. commons.receipt",x:126,y:314,width:888,height:152,state:"focus"},
+    {id:"audit",role:"panel",label:"ACTIVE REACH & HOST CAPABILITY BRIDGE AUDIT LOG  (8-Sector Command Orb Chrome)\n[PERMITTED] [hybrid_augmented] origin=https://dev.civics.au · channel=qualia.10d.mount_holo_embed -> Mounted 10D v2 HOLO\n[PERMITTED] [hybrid_augmented] origin=https://dev.civics.au · channel=qualia.identity.contextual_did -> Master ask refused=true\n[DENIED]    [traditional_web]  origin=https://example.org   · channel=qualia.identity.contextual_did -> ReplyError::Denied",x:126,y:474,width:888,height:116,state:"active"},
+    {id:"footer",role:"footer",label:"Bundled + Independent Updater (update-browser)  ·  3 Modes (Old-Web / Qualia 10D / Hybrid Bridge)  ·  Three-Ring Licence Fence",x:0,y:600,width:1024,height:40,state:"default"}
+  ]
+};
+let theme = capability.invoke("hypermedia.layout.bind_theme_scope", {
+  scope:"environment",
+  mode:"holosonic-dark",
+  accent:[77,184,255,255],
+  corner_radius:16.0
+});
+let ui = capability.invoke("hypermedia.layout.render_ui_sheet", {layout:layout,theme:theme,font:"ui-font.ttf",scale:1.0});
+let png = capability.invoke("hypermedia.radiance.encode_rgba_png", {image:ui});
+let svg = capability.invoke("hypermedia.layout.project_ui_svg", {layout:layout,theme:theme,font:"ui-font.ttf",scale:1.0});
+let diegetic = capability.invoke("hypermedia.layout.project_diegetic_surface", {
+  ui_image:ui,
+  viewport_width:1024,
+  viewport_height:640,
+  yaw_deg:-5.0,
+  pitch_deg:4.0,
+  pick_screen_xy:[512.0,320.0]
+});
+let diegeticPng = capability.invoke("hypermedia.radiance.encode_rgba_png", {image:diegetic.projected_rgba});
+let gallery = capability.invoke("hypermedia.discourse.review_gallery", {
+  title:"Webizen Web Browser — Bundled Independent Product & 3-Mode Routing Engine",
+  files:[
+    {name:"browser-sheet.png",resource:png},
+    {name:"browser-sheet.svg",resource:svg},
+    {name:"browser-diegetic.png",resource:diegeticPng}
+  ]
+});
+let asset={files:[
+  {key:"browser-sheet.png",resource:png},
+  {key:"browser-sheet.svg",resource:svg},
+  {key:"browser-diegetic.png",resource:diegeticPng},
+  {key:"review-gallery.html",resource:gallery}
+]};

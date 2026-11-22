@@ -1,0 +1,50 @@
+requires [capability("capability.invoke")];
+let layout={
+  viewport_width:1024,
+  viewport_height:640,
+  boxes:[
+    {id:"halo",role:"sidebar",label:"WEBIZEN\nspatial\n\n[Humans]\nTalk\nMail\nDirectory\n\n[Volumes]\nBrowser\nKeep\nLibrary\nInstruments\nPoet+Synth\nWellFair\nWallet\nSettings\nAdmin",x:0,y:0,width:98,height:600,state:"default"},
+    {id:"ribbon",role:"header",label:"CONTINUITY RIBBON  [ who: NaturalAgent ] · [ claim: CoAttestation ] · [ handle: DNI/QRC ] · [ tool: Instrument ]",x:106,y:8,width:908,height:36,state:"active"},
+    {id:"stage",role:"canvas",label:"ETALON NATIVE GPU STAGE (VULKAN / DX12)  ·  POET 8-SECTOR COMMAND ORB CHROME",x:106,y:50,width:908,height:542,state:"active"},
+    {id:"talk",role:"card",label:"TALK  [Live]\n\nPerson waiting for a person\nHuman <-> human over QDNF.\nChatbot is a tool - never the peer.",x:120,y:88,width:276,height:142,state:"hover"},
+    {id:"mail",role:"card",label:"MAIL  [Live]\n\nRelationship-scoped inbox\nPairwise locators (A->B != B->A).\nDomain expiry never erases who.",x:408,y:88,width:276,height:142,state:"default"},
+    {id:"orb",role:"panel",label:"8-SECTOR COMMAND ORB\n\n1. Close (X)   5. Keep\n2. Soften (-)  6. Share\n3. Full ([])   7. Inspect\n4. Float (O)   8. More",x:696,y:88,width:302,height:142,state:"focus"},
+    {id:"poet",role:"card",label:"POET & SYNTH WORKBENCH  [Live]\n\nVibeScript 0.1/0.2 REPL cells (42 MiB SlgArena)\n150 hypermedia.* morphisms (.10d v2 HOLO / .hmc / .q42)\nDeterministic NLP Gazetteer -> 48-byte NQuin48",x:120,y:246,width:428,height:158,state:"focus"},
+    {id:"wallet",role:"card",label:"WALLET & COMMONS  [Live]\n\nLightning (sats) · Nym Mixnet · eCash (XEC) · Tokens\nTwo-Loop Permissive Commons & 9-Stage Contribution\nHuman signs via KeyVault; no ETH target.",x:562,y:246,width:436,height:158,state:"default"},
+    {id:"wellfair",role:"panel",label:"WELLFAIR & ANATOMY  [Live]\n\n48B NQuin Epistemic Envelopes · 3D Anatomy & Dyad\nRelational Guardianship (UN CRC/CRPD) · 6 Vectors",x:120,y:420,width:428,height:156,state:"default"},
+    {id:"constel",role:"panel",label:"CONSTELLATION · LIVE VOLUMES\n\nTalk · Mail · Directory · Browser · Keep · Library\nInstruments (6 Core SI + 40 Logics) · Poet+Synth\nWellFair · Wallet · Settings (10 tabs) · Admin",x:562,y:420,width:436,height:156,state:"default"},
+    {id:"footer",role:"footer",label:"handle != human  ·  agent = tool  ·  VC = origin/integrity     Guest/Appliance · Etalon Native GPU · 42 MiB Sentinel     Launch...",x:0,y:600,width:1024,height:40,state:"default"}
+  ]
+};
+let theme = capability.invoke("hypermedia.layout.bind_theme_scope", {
+  scope:"environment",
+  mode:"holosonic-dark",
+  accent:[47,224,200,255],
+  corner_radius:16.0
+});
+let ui = capability.invoke("hypermedia.layout.render_ui_sheet", {layout:layout,theme:theme,font:"ui-font.ttf",scale:1.0});
+let png = capability.invoke("hypermedia.radiance.encode_rgba_png", {image:ui});
+let svg = capability.invoke("hypermedia.layout.project_ui_svg", {layout:layout,theme:theme,font:"ui-font.ttf",scale:1.0});
+let diegetic = capability.invoke("hypermedia.layout.project_diegetic_surface", {
+  ui_image:ui,
+  viewport_width:1024,
+  viewport_height:640,
+  yaw_deg:7.0,
+  pitch_deg:-5.0,
+  pick_screen_xy:[512.0,320.0]
+});
+let diegeticPng = capability.invoke("hypermedia.radiance.encode_rgba_png", {image:diegetic.projected_rgba});
+let gallery = capability.invoke("hypermedia.discourse.review_gallery", {
+  title:"Webizen OS-Shell — Synth + Aether Spatial Chrome Overhaul",
+  files:[
+    {name:"shell-sheet.png",resource:png},
+    {name:"shell-sheet.svg",resource:svg},
+    {name:"shell-diegetic.png",resource:diegeticPng}
+  ]
+});
+let asset={files:[
+  {key:"shell-sheet.png",resource:png},
+  {key:"shell-sheet.svg",resource:svg},
+  {key:"shell-diegetic.png",resource:diegeticPng},
+  {key:"review-gallery.html",resource:gallery}
+]};

@@ -1,36 +1,132 @@
+use crate::state::{ShellState, VolumeStage};
 use aether::prelude::*;
-use crate::state::ShellState;
+use webizen_ua_os::CareAlertSeverity;
+
+const HUMAN: &[(&str, VolumeStage, &str)] = &[
+    ("Talk", VolumeStage::Talk, "💬"),
+    ("Mail", VolumeStage::Mail, "✉"),
+    ("Directory", VolumeStage::Directory, "👥"),
+];
+
+const VOLUMES: &[(&str, VolumeStage, &str)] = &[
+    ("Browser", VolumeStage::Browser, "🌐"),
+    ("Keep", VolumeStage::Keep, "🛡"),
+    ("Library", VolumeStage::Library, "📚"),
+    ("Instruments", VolumeStage::Instruments, "🎛"),
+    ("Poet+Synth", VolumeStage::Poet, "🪶"),
+    ("WellFair", VolumeStage::Wellfair, "💚"),
+    ("Wallet", VolumeStage::Wallet, "⚡"),
+    ("Settings", VolumeStage::Settings, "⚙"),
+    ("Admin", VolumeStage::Admin, "🔧"),
+];
 
 #[component]
-pub fn HaloBar(state: Signal<ShellState>) -> Element {
+pub fn HaloBar(mut state: Signal<ShellState>) -> Element {
     let s = state.read();
+    let current = s.current_stage;
+    let peers = s.p2p_peers_count;
+    let nym = s.nym_mixnet_active;
+    let os_user = s.os_username.clone();
+    let spatial = s.spatial_mode;
+    let launcher_open = s.launcher_open;
+    let active_care_alerts = s
+        .host_stewardship
+        .care_alerts
+        .iter()
+        .filter(|alert| !alert.resolved_or_reversed && alert.severity >= CareAlertSeverity::Urgent)
+        .count();
+    let care_alert_label = if active_care_alerts == 1 {
+        "1 urgent care alert".to_owned()
+    } else {
+        format!("{active_care_alerts} urgent care alerts")
+    };
+    drop(s);
+
     rsx! {
-        header {
-            class: "halo-bar",
-            style: "display: flex; justify-content: space-between; align-items: center; padding: 10px 24px; background: rgba(14, 18, 28, 0.85); backdrop-filter: blur(16px); border-bottom: 1px solid rgba(255, 255, 255, 0.08); font-family: system-ui, sans-serif; color: #e2e8f0; z-index: 100;",
-            div {
-                style: "display: flex; align-items: center; gap: 12px;",
-                span { style: "font-weight: 700; letter-spacing: 0.05em; font-size: 15px; color: #38bdf8;", "WEBIZEN OS" }
-                if s.spatial_mode {
-                    span { style: "font-size: 11px; padding: 2px 8px; border-radius: 9999px; background: rgba(56, 189, 248, 0.15); color: #38bdf8;", "SPATIAL HALO" }
+        nav {
+            class: "halo",
+            aria_label: "Humans-first spatial halo",
+            span { class: "brand-slot", "WEBIZEN" }
+            if spatial {
+                span { class: "brand-slot", "spatial · etalon" }
+            }
+            button {
+                r#type: "button",
+                class: "fav omni-intent-launch",
+                title: "Open the semantic command palette (Ctrl+K)",
+                aria_keyshortcuts: "Control+K",
+                aria_expanded: if launcher_open { "true" } else { "false" },
+                onclick: move |_| state.write().launcher_open = true,
+                span { class: "orb", aria_hidden: "true", "◉" }
+                span { class: "label", "Commands" }
+            }
+            h2 { "Humans" }
+            for (name, stage_item, glyph) in HUMAN.iter() {
+                {
+                    let stage = *stage_item;
+                    let pressed = current == stage;
+                    rsx! {
+                        button {
+                            key: "{name}",
+                            r#type: "button",
+                            class: "fav human",
+                            aria_pressed: if pressed { "true" } else { "false" },
+                            onclick: move |_| {
+                                let mut s = state.write();
+                                if s.current_stage == stage {
+                                    s.current_stage = VolumeStage::None;
+                                } else {
+                                    s.current_stage = stage;
+                                    s.active_plane = stage.primary_plane();
+                                }
+                                s.orb_open = false;
+                            },
+                            span { class: "orb", aria_hidden: "true", "{glyph}" }
+                            span { class: "label", "{name}" }
+                        }
+                    }
                 }
             }
-            div {
-                style: "display: flex; align-items: center; gap: 20px; font-size: 13px;",
-                div {
-                    style: "display: flex; align-items: center; gap: 6px;",
-                    span { style: "width: 8px; height: 8px; border-radius: 50%; background: #4ade80;" }
-                    span { "{s.p2p_peers_count} Peers" }
-                }
-                div {
-                    style: "display: flex; align-items: center; gap: 6px;",
-                    span { style: if s.nym_mixnet_active { "color: #38bdf8;" } else { "color: #94a3b8;" }, "Nym Mixnet" }
-                }
-                div {
-                    style: "font-family: monospace; font-size: 11px; color: #94a3b8;",
-                    "{s.did_fingerprint}"
+            div { class: "sep", role: "separator", aria_hidden: "true" }
+            h2 { "Volumes" }
+            for (name, stage_item, glyph) in VOLUMES.iter() {
+                {
+                    let stage = *stage_item;
+                    let pressed = current == stage;
+                    rsx! {
+                        button {
+                            key: "{name}",
+                            r#type: "button",
+                            class: "fav",
+                            aria_pressed: if pressed { "true" } else { "false" },
+                            onclick: move |_| {
+                                let mut s = state.write();
+                                if s.current_stage == stage {
+                                    s.current_stage = VolumeStage::None;
+                                } else {
+                                    s.current_stage = stage;
+                                    s.active_plane = stage.primary_plane();
+                                }
+                                s.orb_open = false;
+                            },
+                            span { class: "orb", aria_hidden: "true", "{glyph}" }
+                            span { class: "label", "{name}" }
+                            if stage == VolumeStage::Wellfair && active_care_alerts > 0 {
+                                span {
+                                    class: "urgent-care-pill",
+                                    aria_label: "{care_alert_label}",
+                                    title: "{care_alert_label}",
+                                    "{active_care_alerts}"
+                                }
+                            }
+                        }
+                    }
                 }
             }
+            div { class: "sep", role: "separator", aria_hidden: "true" }
+            span { class: "brand-slot", "os:{os_user}" }
+            span { class: "brand-slot", "{peers} peers" }
+            span { class: "brand-slot", if nym { "Nym live" } else { "Nym standby" } }
         }
     }
 }

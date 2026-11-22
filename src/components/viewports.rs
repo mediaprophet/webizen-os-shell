@@ -1,0 +1,1650 @@
+// Copyright (c) 2026 Timothy Charles Holborn.
+// SPDX-License-Identifier: CC-BY-NC-ND-4.0
+
+use std::{
+    borrow::Cow,
+    cell::RefCell,
+    future::Future,
+    rc::Rc,
+    sync::{Arc, Mutex, MutexGuard},
+    task::{Context, Poll, Waker},
+    time::{Duration, Instant},
+};
+
+use aether::prelude::*;
+use aether_native::{
+    use_window, use_window_event,
+    viewport::{
+        EtalonFrameContext, EtalonSurfaceDelegate, EtalonSurfaceError, EtalonSurfaceWidget,
+        EtalonViewportState, RenderOutcome,
+    },
+    winit::{event::WindowEvent, window::Window},
+    AetherNativeWindowRenderer, CustomWidgetAttr,
+};
+use anyrender::{PaintScene, Scene};
+use blitz_dom::IntrinsicSizes;
+use blitz_traits::events::{BlitzWheelDelta, MouseEventButton, UiEvent};
+use kurbo::{Affine, BezPath, Circle, Line, Point, Rect, Stroke};
+use peniko::{Color, Fill};
+use webizen_ua_os::{
+    evaluate_hybrid_page_request, proxy_corners_for_specimen, resolve_holo_10d_specimen,
+    resolve_mode_for_uri, BrowserExecutionMode, HoloShaderVisualizationMode,
+    HybridWebCapabilityChannel, VerifiedHolo10dSpecimen, DEFAULT_HOLO_SPECIMENS,
+    HOLO_MAX_RAYMARCH_STEPS,
+};
+
+use crate::state::{session, ShellState};
+
+const MAX_HARMONIC: u8 = 4;
+const MAX_STEPS: u32 = HOLO_MAX_RAYMARCH_STEPS;
+const UNIFORM_BYTES: u64 = 32;
+const CYAN: Color = Color::from_rgba8(47, 224, 200, 220);
+const VIOLET: Color = Color::from_rgba8(139, 124, 255, 160);
+const BACKGROUND: Color = Color::from_rgba8(13, 17, 30, 255);
+const CORNERS: [[f32; 3]; 8] = [
+    [-0.7, -0.7, -0.7],
+    [0.7, -0.7, -0.7],
+    [0.7, 0.7, -0.7],
+    [-0.7, 0.7, -0.7],
+    [-0.7, -0.7, 0.7],
+    [0.7, -0.7, 0.7],
+    [0.7, 0.7, 0.7],
+    [-0.7, 0.7, 0.7],
+];
+const PROXY_EDGES: [(usize, usize); 12] = [
+    (0, 1),
+    (1, 2),
+    (2, 3),
+    (3, 0),
+    (4, 5),
+    (5, 6),
+    (6, 7),
+    (7, 4),
+    (0, 4),
+    (1, 5),
+    (2, 6),
+    (3, 7),
+];
+const PROXY_TRIANGLES: [[usize; 3]; 12] = [
+    [0, 2, 1],
+    [0, 3, 2],
+    [4, 5, 6],
+    [4, 6, 7],
+    [0, 1, 5],
+    [0, 5, 4],
+    [3, 7, 6],
+    [3, 6, 2],
+    [0, 4, 7],
+    [0, 7, 3],
+    [1, 2, 6],
+    [1, 6, 5],
+];
+
+#[derive(Clone, Debug)]
+struct HoloViewportControl {
+    specimen: Option<Arc<VerifiedHolo10dSpecimen>>,
+    mode: HoloShaderVisualizationMode,
+    harmonic_k: u8,
+    animating: bool,
+    yaw: f32,
+    pitch: f32,
+    zoom: f32,
+    raymarch_steps: u32,
+}
+
+impl HoloViewportControl {
+    fn new(harmonic_k: u8, animating: bool) -> Self {
+        Self {
+            specimen: None,
+            mode: HoloShaderVisualizationMode::PhaseSpaceWavefield,
+            harmonic_k: harmonic_k.min(MAX_HARMONIC),
+            animating,
+            yaw: 0.55,
+            pitch: 0.35,
+            zoom: 1.0,
+            raymarch_steps: 24,
+        }
+    }
+
+    fn reset_camera(&mut self) {
+        self.yaw = 0.55;
+        self.pitch = 0.35;
+        self.zoom = 1.0;
+    }
+
+    fn orbit(&mut self, x: f32, y: f32) {
+        if x.is_finite() && y.is_finite() {
+            self.yaw = (self.yaw + x * 0.009).rem_euclid(std::f32::consts::TAU);
+            self.pitch = (self.pitch + y * 0.009).clamp(-1.5, 1.5);
+        }
+    }
+
+    fn zoom_by(&mut self, scroll: f64) {
+        if scroll.is_finite() {
+            self.zoom =
+                (self.zoom * (scroll as f32 * 0.004).clamp(-1.0, 1.0).exp()).clamp(0.35, 2.8);
+        }
+    }
+
+    fn steps(&self) -> u32 {
+        self.raymarch_steps.clamp(1, self.step_limit())
+    }
+
+    fn step_limit(&self) -> u32 {
+        self.specimen.as_ref().map_or(MAX_STEPS, |specimen| {
+            u32::from(specimen.max_raymarch_steps).clamp(1, MAX_STEPS)
+        })
+    }
+
+    fn harmonic_limit(&self) -> u8 {
+        self.specimen.as_ref().map_or(MAX_HARMONIC, |specimen| {
+            specimen.max_harmonic_order.min(MAX_HARMONIC)
+        })
+    }
+
+    fn harmonic(&self) -> u8 {
+        self.harmonic_k.min(self.harmonic_limit())
+    }
+
+    fn projection_bounds(&self) -> [[f32; 3]; 8] {
+        let Some(specimen) = &self.specimen else {
+            return CORNERS;
+        };
+        let min = specimen.proxy_aabb_min.map(f64::from);
+        let max = specimen.proxy_aabb_max.map(f64::from);
+        // Center the camera on the specimen and scale profiles larger than the viewport.
+        let center: [f64; 3] = std::array::from_fn(|axis| (min[axis] + max[axis]) * 0.5);
+        let divisor = (0..3)
+            .map(|axis| (max[axis] - min[axis]) * 0.5)
+            .fold(1.0_f64, f64::max);
+        proxy_corners_for_specimen(specimen).map(|corner| {
+            std::array::from_fn(|axis| ((f64::from(corner[axis]) - center[axis]) / divisor) as f32)
+        })
+    }
+
+    fn project(&self, [x, y, z]: [f32; 3]) -> [f32; 2] {
+        let (sy, cy) = self.yaw.sin_cos();
+        let (sp, cp) = self.pitch.sin_cos();
+        let x1 = cy * x + sy * z;
+        let z1 = -sy * x + cy * z;
+        [x1 * self.zoom, (cp * y - sp * z1) * self.zoom]
+    }
+}
+
+fn controls(control: &Mutex<HoloViewportControl>) -> MutexGuard<'_, HoloViewportControl> {
+    control.lock().unwrap_or_else(|error| error.into_inner())
+}
+
+struct HoloGpu {
+    pipeline: etalon::RenderPipeline,
+    uniform: etalon::Buffer,
+    bindings: etalon::BindGroup,
+}
+
+/// Etalon delegate for the bounded holographic phase-space projection preview.
+pub struct WebizenHolo10dSurfaceDelegate {
+    control: Arc<Mutex<HoloViewportControl>>,
+    window: Arc<dyn Window>,
+    gpu: Option<HoloGpu>,
+    dragging_from: Option<(f32, f32)>,
+    focused: bool,
+    phase: f32,
+    previous_frame: Option<Instant>,
+    fallback_seen: bool,
+}
+
+impl WebizenHolo10dSurfaceDelegate {
+    fn new(control: Arc<Mutex<HoloViewportControl>>, window: Arc<dyn Window>) -> Self {
+        Self {
+            control,
+            window,
+            gpu: None,
+            dragging_from: None,
+            focused: false,
+            phase: 0.0,
+            previous_frame: None,
+            fallback_seen: false,
+        }
+    }
+
+    fn frame_phase(&mut self, animating: bool) -> f32 {
+        let now = Instant::now();
+        if animating {
+            if let Some(previous) = self.previous_frame.replace(now) {
+                self.phase = (self.phase
+                    + now
+                        .duration_since(previous)
+                        .min(Duration::from_millis(100))
+                        .as_secs_f32()
+                        * 2.0)
+                    .rem_euclid(std::f32::consts::TAU);
+            }
+        } else {
+            self.previous_frame = None;
+        }
+        self.phase
+    }
+}
+
+fn uniform_data(
+    view: &HoloViewportControl,
+    width: u32,
+    height: u32,
+    phase: f32,
+) -> [u8; UNIFORM_BYTES as usize] {
+    let mut bytes = [0; UNIFORM_BYTES as usize];
+    let bounds = view.projection_bounds();
+    let [x, y, z] = bounds[6].map(|axis| (axis.clamp(0.0, 1.0) * 1023.0).round() as u32);
+    let packed_bounds = x | (y << 10) | (z << 20);
+    let sigma = view
+        .specimen
+        .as_ref()
+        .map_or(0.56, |spec| spec.reference_sigma);
+    let packed_view = view.steps()
+        | (u32::from(view.harmonic()) << 6)
+        | (view.mode.shader_mode_index() << 9)
+        | (((sigma * 255.0).round() as u32) << 11);
+    let words = [
+        view.yaw.to_bits(),
+        view.pitch.to_bits(),
+        view.zoom.to_bits(),
+        phase.to_bits(),
+        (width as f32).to_bits(),
+        (height as f32).to_bits(),
+        packed_bounds,
+        packed_view,
+    ];
+    for (lane, word) in bytes.chunks_exact_mut(4).zip(words) {
+        lane.copy_from_slice(&word.to_le_bytes());
+    }
+    bytes
+}
+
+fn etalon_scope_result(scope: etalon::ErrorScopeGuard) -> Result<(), EtalonSurfaceError> {
+    let mut result = std::pin::pin!(scope.pop());
+    match result
+        .as_mut()
+        .poll(&mut Context::from_waker(Waker::noop()))
+    {
+        Poll::Ready(None) => Ok(()),
+        Poll::Ready(Some(error)) => Err(EtalonSurfaceError::RenderPassFailed(error.to_string())),
+        Poll::Pending => Err(EtalonSurfaceError::RenderPassFailed(
+            "Etalon validation has not completed".into(),
+        )),
+    }
+}
+
+impl EtalonSurfaceDelegate for WebizenHolo10dSurfaceDelegate {
+    fn prepare(
+        &mut self,
+        device: &etalon::Device,
+        _: &etalon::Queue,
+    ) -> Result<(), EtalonSurfaceError> {
+        self.gpu = None;
+        let oom = device.push_error_scope(etalon::ErrorFilter::OutOfMemory);
+        let validation = device.push_error_scope(etalon::ErrorFilter::Validation);
+        let layout = device.create_bind_group_layout(&etalon::BindGroupLayoutDescriptor {
+            label: Some("Webizen HOLO uniform binding"),
+            entries: &[etalon::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: etalon::ShaderStages::FRAGMENT,
+                ty: etalon::BindingType::Buffer {
+                    ty: etalon::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: etalon::BufferSize::new(UNIFORM_BYTES),
+                },
+                count: None,
+            }],
+        });
+        let pipeline_layout = device.create_pipeline_layout(&etalon::PipelineLayoutDescriptor {
+            label: Some("Webizen HOLO pipeline layout"),
+            bind_group_layouts: &[Some(&layout)],
+            ..Default::default()
+        });
+        let uniform = device.create_buffer(&etalon::BufferDescriptor {
+            label: Some("Webizen HOLO camera and budget"),
+            size: UNIFORM_BYTES,
+            usage: etalon::BufferUsages::UNIFORM | etalon::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let bindings = device.create_bind_group(&etalon::BindGroupDescriptor {
+            label: Some("Webizen HOLO uniform group"),
+            layout: &layout,
+            entries: &[etalon::BindGroupEntry {
+                binding: 0,
+                resource: uniform.as_entire_binding(),
+            }],
+        });
+        let shader = device.create_shader_module(etalon::ShaderModuleDescriptor {
+            label: Some("Webizen HOLO preview"),
+            source: etalon::ShaderSource::Wgsl(Cow::Borrowed(HOLO_SHADER)),
+        });
+        let pipeline = device.create_render_pipeline(&etalon::RenderPipelineDescriptor {
+            label: Some("Webizen HOLO preview pipeline"),
+            layout: Some(&pipeline_layout),
+            vertex: etalon::VertexState {
+                module: &shader,
+                entry_point: Some("vs_main"),
+                compilation_options: Default::default(),
+                buffers: &[],
+            },
+            primitive: Default::default(),
+            depth_stencil: None,
+            multisample: Default::default(),
+            fragment: Some(etalon::FragmentState {
+                module: &shader,
+                entry_point: Some("fs_main"),
+                compilation_options: Default::default(),
+                targets: &[Some(etalon::ColorTargetState {
+                    format: etalon::TextureFormat::Rgba8Unorm,
+                    blend: None,
+                    write_mask: etalon::ColorWrites::ALL,
+                })],
+            }),
+            multiview_mask: None,
+            cache: None,
+        });
+        let validated = etalon_scope_result(validation);
+        let allocated = etalon_scope_result(oom);
+        validated.and(allocated)?;
+        self.gpu = Some(HoloGpu {
+            pipeline,
+            uniform,
+            bindings,
+        });
+        self.window.request_redraw();
+        Ok(())
+    }
+
+    fn render_frame(
+        &mut self,
+        ctx: &EtalonFrameContext<'_>,
+    ) -> Result<RenderOutcome, EtalonSurfaceError> {
+        let view = controls(&self.control).clone();
+        let phase = self.frame_phase(view.animating);
+        let gpu = self
+            .gpu
+            .as_ref()
+            .ok_or(EtalonSurfaceError::NoGpuContextAvailable)?;
+        let validation = ctx.device.push_error_scope(etalon::ErrorFilter::Validation);
+        ctx.queue.write_buffer(
+            &gpu.uniform,
+            0,
+            &uniform_data(&view, ctx.width, ctx.height, phase),
+        );
+        let mut encoder = ctx
+            .device
+            .create_command_encoder(&etalon::CommandEncoderDescriptor {
+                label: Some("Webizen HOLO frame"),
+            });
+        {
+            let attachments = [Some(etalon::RenderPassColorAttachment {
+                view: ctx.target_view,
+                depth_slice: None,
+                resolve_target: None,
+                ops: etalon::Operations {
+                    load: etalon::LoadOp::Clear(etalon::Color::BLACK),
+                    store: etalon::StoreOp::Store,
+                },
+            })];
+            let mut pass = encoder.begin_render_pass(&etalon::RenderPassDescriptor {
+                label: Some("Webizen HOLO projection"),
+                color_attachments: &attachments,
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            pass.set_pipeline(&gpu.pipeline);
+            pass.set_bind_group(0, &gpu.bindings, &[]);
+            pass.draw(0..3, 0..1);
+        }
+        ctx.queue.submit([encoder.finish()]);
+        etalon_scope_result(validation)?;
+        Ok(if view.animating {
+            RenderOutcome::ContinuousRedraw
+        } else {
+            RenderOutcome::Static
+        })
+    }
+
+    fn paint_fallback(&mut self, width: u32, height: u32, scale: f64) -> Scene {
+        let view = controls(&self.control).clone();
+        let phase = self.frame_phase(view.animating);
+        let mut scene = Scene::new();
+        let (width, height) = (f64::from(width), f64::from(height));
+        let extent = width.min(height);
+        let origin = Point::new(width * 0.5, height * 0.5);
+        scene.fill(
+            Fill::NonZero,
+            Affine::IDENTITY,
+            BACKGROUND,
+            None,
+            &Rect::new(0.0, 0.0, width, height),
+        );
+        let points = view.projection_bounds().map(|corner| {
+            let [x, y] = view.project(corner);
+            Point::new(
+                origin.x + f64::from(x) * extent * 0.27,
+                origin.y - f64::from(y) * extent * 0.27,
+            )
+        });
+        let line = Stroke::new(scale.clamp(1.0, 2.0));
+        paint_shader_fallback(&mut scene, &view, origin, extent, phase, &line);
+        for (a, b) in PROXY_EDGES {
+            scene.stroke(
+                &line,
+                Affine::IDENTITY,
+                CYAN,
+                None,
+                &Line::new(points[a], points[b]),
+            );
+        }
+        let diagonal = Stroke::new(line.width * 0.7);
+        for triangle in PROXY_TRIANGLES {
+            let [a, b, c] = triangle;
+            if let Some((from, to)) = [(a, b), (b, c), (c, a)].into_iter().find(|edge| {
+                !PROXY_EDGES
+                    .iter()
+                    .any(|&(a, b)| *edge == (a, b) || *edge == (b, a))
+            }) {
+                scene.stroke(
+                    &diagonal,
+                    Affine::IDENTITY,
+                    Color::from_rgba8(47, 224, 200, 85),
+                    None,
+                    &Line::new(points[from], points[to]),
+                );
+            }
+        }
+        if view.animating || !self.fallback_seen {
+            self.window.request_redraw();
+        }
+        self.fallback_seen = true;
+        scene
+    }
+
+    fn handle_event(&mut self, event: &UiEvent, _: f64) {
+        let mut view = controls(&self.control);
+        let repaint = match event {
+            UiEvent::PointerDown(pointer)
+                if pointer.is_primary && pointer.button == MouseEventButton::Main =>
+            {
+                self.dragging_from = Some((pointer.coords.client_x, pointer.coords.client_y));
+                false
+            }
+            UiEvent::PointerMove(pointer) if pointer.is_primary && self.dragging_from.is_some() => {
+                let next = (pointer.coords.client_x, pointer.coords.client_y);
+                if let Some((x, y)) = self.dragging_from.replace(next) {
+                    view.orbit(next.0 - x, next.1 - y);
+                }
+                true
+            }
+            UiEvent::PointerUp(_) | UiEvent::PointerCancel(_) | UiEvent::PointerLeave(_) => {
+                self.dragging_from = None;
+                false
+            }
+            UiEvent::Wheel(wheel) => {
+                let delta = match wheel.delta {
+                    BlitzWheelDelta::Lines(_, y) => y * 38.0,
+                    BlitzWheelDelta::Pixels(_, y) => y,
+                };
+                view.zoom_by(delta);
+                true
+            }
+            UiEvent::KeyDown(key) if self.focused && !key.is_auto_repeating => {
+                match key.key.to_string().as_str() {
+                    " " => {
+                        view.animating = !view.animating;
+                        true
+                    }
+                    "r" | "R" => {
+                        view.reset_camera();
+                        true
+                    }
+                    _ => false,
+                }
+            }
+            _ => false,
+        };
+        drop(view);
+        if repaint {
+            self.window.request_redraw();
+        }
+    }
+
+    fn focus_changed(&mut self, focused: bool) {
+        self.focused = focused;
+        if !focused {
+            self.dragging_from = None;
+        }
+    }
+
+    fn intrinsic_sizes(&self) -> IntrinsicSizes {
+        IntrinsicSizes {
+            width: Some(560.0),
+            height: Some(320.0),
+            ratio: Some(560.0 / 320.0),
+        }
+    }
+
+    fn destroy(&mut self) {
+        self.gpu = None;
+        self.dragging_from = None;
+        self.previous_frame = None;
+        self.fallback_seen = false;
+    }
+}
+
+fn paint_shader_fallback(
+    scene: &mut Scene,
+    view: &HoloViewportControl,
+    origin: Point,
+    extent: f64,
+    phase: f32,
+    stroke: &Stroke,
+) {
+    use HoloShaderVisualizationMode::*;
+    let radius = extent * f64::from(view.zoom) * 0.32;
+    let phase = f64::from(phase);
+    let harmonic = view.harmonic();
+    match view.mode {
+        PhaseSpaceWavefield => {
+            for order in 0..=harmonic {
+                let radial =
+                    0.21 * f64::from(order + 1) + 0.025 * (phase + f64::from(order) * 0.55).sin();
+                let circle = Circle::new(origin, radius * radial);
+                scene.stroke(stroke, Affine::IDENTITY, VIOLET, None, &circle);
+            }
+        }
+        HyperbolicMobiusV2 => {
+            let a = 0.33 + 0.11 * phase.cos();
+            for order in 0..=harmonic {
+                let ring = 0.15 + f64::from(order) * 0.17;
+                let curve = closed_curve(|angle| {
+                    let (y, x) = angle.sin_cos();
+                    let (x, y) = (x * ring, y * ring);
+                    let (dx, dy) = (1.0 + a * x, a * y);
+                    let quotient = dx.mul_add(dx, dy * dy);
+                    Point::new(
+                        origin.x + radius * ((x + a) * dx + y * dy) / quotient,
+                        origin.y - radius * (y * dx - (x + a) * dy) / quotient,
+                    )
+                });
+                scene.stroke(stroke, Affine::IDENTITY, VIOLET, None, &curve);
+            }
+        }
+        AnatomicalRadialDepth => {
+            let colors = [
+                Color::from_rgba8(250, 149, 110, 160),
+                Color::from_rgba8(232, 111, 143, 170),
+                Color::from_rgba8(159, 98, 221, 180),
+                Color::from_rgba8(95, 118, 247, 195),
+            ];
+            let half = view.projection_bounds()[6];
+            for (index, color) in colors.into_iter().enumerate().rev() {
+                let contour = closed_curve(|angle| {
+                    let (y, x) = angle.sin_cos();
+                    let level = (index as f64 + 1.0) * 0.25;
+                    let [x, y] = view.project([
+                        (x * f64::from(half[0]) * level) as f32,
+                        (y * f64::from(half[1]) * level) as f32,
+                        0.0,
+                    ]);
+                    Point::new(
+                        origin.x + extent * 0.27 * f64::from(x),
+                        origin.y - extent * 0.27 * f64::from(y),
+                    )
+                });
+                scene.stroke(stroke, Affine::IDENTITY, color, None, &contour);
+            }
+        }
+        ScaleSpaceHarmonicSlice => {
+            for order in 0..=harmonic {
+                let contour = closed_curve(|angle| {
+                    let (y, x) = angle.sin_cos();
+                    let petals = (angle * f64::from(2 + order) + phase).cos();
+                    let r = radius * (0.19 + f64::from(order) * 0.16 + 0.08 * petals);
+                    Point::new(origin.x + r * x, origin.y - r * y)
+                });
+                scene.stroke(stroke, Affine::IDENTITY, VIOLET, None, &contour);
+            }
+        }
+    }
+}
+
+fn closed_curve(mut project: impl FnMut(f64) -> Point) -> BezPath {
+    const SEGMENTS: usize = 72;
+    let mut path = BezPath::new();
+    path.move_to(project(0.0));
+    for segment in 1..SEGMENTS {
+        path.line_to(project(
+            segment as f64 * std::f64::consts::TAU / SEGMENTS as f64,
+        ));
+    }
+    path.close_path();
+    path
+}
+
+const HOLO_SHADER: &str = r#"
+struct Frame {
+    camera: vec4<f32>,
+    dimensions: vec2<f32>,
+    packed_bounds: u32,
+    packed_view: u32,
+}
+@group(0) @binding(0) var<uniform> frame: Frame;
+
+const corners = array<vec3<f32>, 8>(
+    vec3(-1.0,-1.0,-1.0), vec3(1.0,-1.0,-1.0), vec3(1.0,1.0,-1.0), vec3(-1.0,1.0,-1.0),
+    vec3(-1.0,-1.0,1.0), vec3(1.0,-1.0,1.0), vec3(1.0,1.0,1.0), vec3(-1.0,1.0,1.0)
+);
+const edges = array<vec2<u32>, 12>(
+    vec2(0u,1u), vec2(1u,2u), vec2(2u,3u), vec2(3u,0u), vec2(4u,5u), vec2(5u,6u),
+    vec2(6u,7u), vec2(7u,4u), vec2(0u,4u), vec2(1u,5u), vec2(2u,6u), vec2(3u,7u)
+);
+const diagonals = array<vec2<u32>, 6>(
+    vec2(0u,2u), vec2(4u,6u), vec2(0u,5u), vec2(3u,6u), vec2(0u,7u), vec2(1u,6u)
+);
+
+@vertex fn vs_main(@builtin(vertex_index) i: u32) -> @builtin(position) vec4<f32> {
+    let xy = array<vec2<f32>, 3>(vec2(-1.0,-1.0), vec2(3.0,-1.0), vec2(-1.0,3.0));
+    return vec4(xy[i], 0.0, 1.0);
+}
+
+fn project(p: vec3<f32>) -> vec2<f32> {
+    let yr = frame.camera.x;
+    let pr = frame.camera.y;
+    let x = cos(yr) * p.x + sin(yr) * p.z;
+    let z = -sin(yr) * p.x + cos(yr) * p.z;
+    return vec2(x, cos(pr) * p.y - sin(pr) * z) * (0.27 * frame.camera.z);
+}
+
+fn line_distance(p: vec2<f32>, a: vec2<f32>, b: vec2<f32>) -> f32 {
+    let d = b - a;
+    return length(p - a - clamp(dot(p - a,d) / max(dot(d,d), 0.0000001), 0.0, 1.0) * d);
+}
+
+fn inverse_orbit(p: vec3<f32>) -> vec3<f32> {
+    let yr = frame.camera.x;
+    let pr = frame.camera.y;
+    let y = cos(pr) * p.y + sin(pr) * p.z;
+    let z = -sin(pr) * p.y + cos(pr) * p.z;
+    return vec3(cos(yr) * p.x - sin(yr) * z, y, sin(yr) * p.x + cos(yr) * z);
+}
+
+fn box_distance(p: vec3<f32>, half_extent: vec3<f32>) -> f32 {
+    let d = abs(p) - half_extent;
+    return length(max(d, vec3(0.0))) + min(max(d.x, max(d.y, d.z)), 0.0);
+}
+
+fn mobius(z: vec2<f32>, a: f32) -> vec2<f32> {
+    let d = vec2(1.0 + a * z.x, a * z.y);
+    let x = vec2(z.x + a, z.y);
+    return vec2(dot(x, d), x.y * d.x - x.x * d.y) / max(dot(d, d), 0.0001);
+}
+
+@fragment fn fs_main(@builtin(position) pixel: vec4<f32>) -> @location(0) vec4<f32> {
+    let size = frame.dimensions;
+    let extent = max(min(size.x, size.y), 1.0);
+    let uv = (pixel.xy - size * 0.5) * vec2(1.0, -1.0) / extent;
+    let packed = frame.packed_view;
+    let step_budget = clamp(packed & 63u, 1u, 32u);
+    let harmonic = min((packed >> 6u) & 7u, 4u);
+    let mode = (packed >> 9u) & 3u;
+    let sigma = f32((packed >> 11u) & 255u) / 255.0;
+    let bounds = frame.packed_bounds;
+    let half_extent = vec3<f32>(
+        f32(bounds & 1023u),
+        f32((bounds >> 10u) & 1023u),
+        f32((bounds >> 20u) & 1023u)
+    ) / 1023.0;
+    let zoom = frame.camera.z;
+    let phase = frame.camera.w;
+    var ray_depth = -1.75;
+    var wave = 0.0;
+    var radial_depth = 0.0;
+    for (var hit = 0u; hit < step_budget; hit += 1u) {
+        let p = inverse_orbit(vec3(uv / (0.27 * zoom), ray_depth));
+        let distance = box_distance(p, half_extent);
+        if distance < 0.005 {
+            let a = cos(length(p) * (5.0 + f32(harmonic) * 2.0) - phase);
+            let b = cos(dot(p, vec3(3.5, 1.25, 2.0)) + phase);
+            wave = max(wave, max(0.0, a * b));
+            let unit_box = abs(p) / max(half_extent, vec3(0.002));
+            radial_depth = max(radial_depth, clamp(1.0 - length(unit_box) * 0.57735, 0.0, 1.0));
+        }
+        ray_depth += max(max(distance, 0.0), 3.5 / f32(step_budget));
+        if ray_depth > 1.75 { break; }
+    }
+    let width_px = 1.0 / extent;
+    let z = uv / (0.32 * zoom);
+    let warped = length(mobius(z, -(0.33 + 0.11 * cos(phase))));
+    let theta_vector = select(vec2(0.0001, 0.0), uv, length(uv) > 0.0001);
+    let theta = atan2(theta_vector.y, theta_vector.x);
+    var rings = 0.0;
+    for (var order = 0u; order <= harmonic; order += 1u) {
+        var distance = abs(length(uv) -
+            (0.068 * f32(order + 1u) + 0.008 * sin(phase + f32(order) * 0.55)) * zoom);
+        if mode == 1u {
+            distance = abs(warped - (0.15 + 0.17 * f32(order))) * 0.32 * zoom;
+        }
+        if mode == 2u {
+            distance = abs(radial_depth - 0.19 * f32(order + 1u)) * 0.32 * zoom;
+        }
+        if mode == 3u {
+            let petals = cos(theta * f32(2u + order) + phase);
+            distance = abs(length(z) - (0.19 + 0.16 * f32(order) + 0.08 * petals)) * 0.32 * zoom;
+        }
+        rings = max(rings, 1.0 - smoothstep(width_px * 0.55, width_px * 1.6, distance));
+    }
+    var wire = 0.0;
+    for (var e = 0u; e < 12u; e += 1u) {
+        let segment = edges[e];
+        let distance = line_distance(uv, project(corners[segment.x] * half_extent),
+            project(corners[segment.y] * half_extent));
+        wire = max(wire, 1.0 - smoothstep(width_px * 0.55, width_px * 1.65, distance));
+    }
+    for (var e = 0u; e < 6u; e += 1u) {
+        let segment = diagonals[e];
+        let distance = line_distance(uv, project(corners[segment.x] * half_extent),
+            project(corners[segment.y] * half_extent));
+        wire = max(wire, (1.0 - smoothstep(width_px * 0.35, width_px * 1.35, distance)) * 0.4);
+    }
+    var rgb = vec3(0.050, 0.067, 0.118) + vec3(0.12, 0.06, 0.19) * wave * (0.5 + sigma);
+    var ring_color = vec3(0.55, 0.49, 1.0);
+    if mode == 2u {
+        ring_color = mix(vec3(0.48, 0.39, 1.0), vec3(1.0, 0.58, 0.40), radial_depth);
+        rgb += ring_color * radial_depth * (0.12 + 0.14 * sigma);
+    }
+    rgb = mix(rgb, ring_color, 0.70 * rings);
+    rgb = mix(rgb, vec3(0.18, 0.88, 0.78), 0.86 * wire);
+    return vec4(rgb, 1.0);
+}
+"#;
+
+#[derive(Clone)]
+struct CachedViewport {
+    stable_id: usize,
+    attr: CustomWidgetAttr,
+    control: Arc<Mutex<HoloViewportControl>>,
+    read_surface: Rc<dyn Fn() -> EtalonViewportState>,
+}
+
+fn make_viewport(
+    stable_id: usize,
+    control: HoloViewportControl,
+    window: Arc<dyn Window>,
+) -> CachedViewport {
+    let control = Arc::new(Mutex::new(control));
+    let widget = EtalonSurfaceWidget::new(WebizenHolo10dSurfaceDelegate::new(
+        Arc::clone(&control),
+        window,
+    ));
+    let read_surface = Rc::new(widget.state_reader());
+    let attr = CustomWidgetAttr::with_stable_id(stable_id, widget);
+    CachedViewport {
+        stable_id,
+        attr,
+        control,
+        read_surface,
+    }
+}
+
+#[component]
+pub fn Holo10dViewport(
+    mut state: Signal<ShellState>,
+    specimen_label: String,
+    #[props(default)] specimen_id: String,
+) -> Element {
+    let window = use_window();
+    let renderer = try_consume_context::<AetherNativeWindowRenderer>();
+    let cache = use_hook(|| Rc::new(RefCell::new(None::<CachedViewport>)));
+    let mut display = use_signal(|| String::from("Viewport waiting for native surface"));
+    let mut budget_display = use_signal(|| 24u32);
+    let mut applied_route = use_signal(|| None::<String>);
+    let mut resolved =
+        use_signal(|| None::<(String, Result<Arc<VerifiedHolo10dSpecimen>, String>)>);
+    let specimen_id = specimen_id.trim().to_owned();
+    let (id, initial_k, initial_animating, active_specimen_id, mode_override) = {
+        let shell = state.read();
+        (
+            shell.viewport_widget_id,
+            shell.holo_scale_k,
+            shell.holo_wireframe_animating,
+            shell.active_holo_specimen_id.clone(),
+            shell.holo_shader_mode,
+        )
+    };
+    // Publish a committed Browser or Library route once. Studio choices can then
+    // update the shared selection until the enclosing route changes again.
+    use_effect(use_reactive((&specimen_id,), move |(selected,)| {
+        if !selected.is_empty() && state.peek().active_holo_specimen_id != selected {
+            let mut shell = state.write();
+            shell.active_holo_specimen_id.clone_from(&selected);
+            shell.holo_shader_mode = None;
+        }
+        applied_route.set(Some(selected));
+    }));
+    let active_specimen_id = if !specimen_id.is_empty()
+        && applied_route.read().as_deref() != Some(specimen_id.as_str())
+    {
+        specimen_id
+    } else if active_specimen_id.is_empty() {
+        DEFAULT_HOLO_SPECIMENS[0].into()
+    } else {
+        active_specimen_id
+    };
+    use_effect(use_reactive((&active_specimen_id,), move |(query,)| {
+        let result = session()
+            .ok_or_else(|| String::from("Open an adopted local session to load specimen files."))
+            .and_then(|adopted| resolve_holo_10d_specimen(&adopted.host.storage, &query))
+            .map(Arc::new);
+        resolved.set(Some((query, result)));
+    }));
+    let result = resolved
+        .read()
+        .as_ref()
+        .filter(|(query, _)| query == &active_specimen_id)
+        .map(|(_, result)| result.clone());
+    let (specimen, specimen_status) = match result {
+        Some(Ok(specimen)) => (
+            Some(specimen.clone()),
+            format!(
+                "{} · verified Webizen HOLO header · {} proxy segments · {} wavefield records declared",
+                specimen.title, specimen.holo_segment_count, specimen.wavefield_count
+            ),
+        ),
+        Some(Err(error)) => (None, format!("Procedural projection · {error}")),
+        None => (None, String::from("Resolving local HOLO specimen…")),
+    };
+    let specimen_integrity = specimen.as_ref().map(|specimen| {
+        format!(
+            "Subject {:016x} · NQuin48 parity {:016x} · SHA3-256 {}",
+            specimen.nquin_subject_hash, specimen.sealed_nquin_parity, specimen.sha3_256_hex
+        )
+    });
+    let mode = mode_override.unwrap_or_else(|| {
+        specimen.as_ref().map_or(
+            HoloShaderVisualizationMode::PhaseSpaceWavefield,
+            |specimen| specimen.default_shader_mode,
+        )
+    });
+    let entry = {
+        let mut mounted = cache.borrow_mut();
+        if mounted
+            .as_ref()
+            .is_none_or(|previous| previous.stable_id != id)
+        {
+            *mounted = Some(make_viewport(
+                id,
+                HoloViewportControl::new(initial_k, initial_animating),
+                Arc::clone(&window),
+            ));
+        }
+        mounted.as_ref().cloned()
+    };
+
+    use_window_event({
+        let cache = Rc::clone(&cache);
+        move |event, _| {
+            if !matches!(event, WindowEvent::RedrawRequested) {
+                return;
+            }
+            let Some(entry) = cache.borrow().as_ref().cloned() else {
+                return;
+            };
+            let animating = controls(&entry.control).animating;
+            if state.peek().holo_wireframe_animating != animating {
+                state.write().holo_wireframe_animating = animating;
+            }
+            let surface = match (entry.read_surface)() {
+                EtalonViewportState::Suspended => String::from("Viewport suspended"),
+                EtalonViewportState::Active => String::from("Etalon projection active"),
+                EtalonViewportState::CpuFallbackNotice(note) => note,
+                EtalonViewportState::Faulted(error) => {
+                    format!(
+                        "Etalon projection unavailable ({error:?}). Showing the vector fallback."
+                    )
+                }
+            };
+            let next = if let Some(renderer) = &renderer {
+                let health = renderer.health();
+                let health_label = if health.faulted {
+                    "fault reported"
+                } else if health.gpu_active {
+                    "GPU active"
+                } else {
+                    "GPU inactive"
+                };
+                let description = format!("{surface} · {} · {health_label}", health.backend_name);
+                match health.last_error.as_deref() {
+                    Some(error) => format!("{description} · {error}"),
+                    None => description,
+                }
+            } else {
+                surface
+            };
+            if *display.peek() != next {
+                display.set(next);
+            }
+        }
+    });
+
+    let Some(entry) = entry else {
+        return VNode::empty();
+    };
+    let (harmonic_limit, step_limit) = {
+        let mut control = controls(&entry.control);
+        let previous = control
+            .specimen
+            .as_ref()
+            .map(|specimen| &specimen.sha3_256_hex);
+        let current = specimen.as_ref().map(|specimen| &specimen.sha3_256_hex);
+        let changed =
+            previous != current || control.mode != mode || control.harmonic_k != initial_k;
+        if changed {
+            control.specimen = specimen;
+            control.mode = mode;
+            control.harmonic_k = initial_k;
+        }
+        let limits = (control.harmonic_limit(), control.step_limit());
+        drop(control);
+        if changed {
+            window.request_redraw();
+        }
+        limits
+    };
+    let selected_harmonic = initial_k.min(harmonic_limit);
+    let selected_budget = budget_display().min(step_limit);
+    let attr = entry.attr.clone();
+    let scale_control = Arc::clone(&entry.control);
+    let scale_window = Arc::clone(&window);
+    let step_control = Arc::clone(&entry.control);
+    let step_window = Arc::clone(&window);
+    let animate_control = Arc::clone(&entry.control);
+    let animate_window = Arc::clone(&window);
+    let reset_control = Arc::clone(&entry.control);
+    let animate_label = if initial_animating {
+        "Pause wavefield"
+    } else {
+        "Animate wavefield"
+    };
+    rsx! {
+        section {
+            class: "holo-viewport",
+            h4 { "Holographic 10D v2 HOLO (0x0306)" }
+            p { "{specimen_label} · {specimen_status}" }
+            if let Some(integrity) = specimen_integrity {
+                p { class: "muted", "{integrity}" }
+            }
+            div { class: "input-row",
+                label {
+                    "Local specimens"
+                    select {
+                        value: "{active_specimen_id}",
+                        onchange: move |event| {
+                            let selected = event.value();
+                            if !DEFAULT_HOLO_SPECIMENS.contains(&selected.as_str()) {
+                                return;
+                            }
+                            let mut shell = state.write();
+                            shell.active_holo_specimen_id = selected;
+                            shell.holo_shader_mode = None;
+                        },
+                        if !DEFAULT_HOLO_SPECIMENS.contains(&active_specimen_id.as_str()) {
+                            option { value: "{active_specimen_id}", "{active_specimen_id}" }
+                        }
+                        for id in DEFAULT_HOLO_SPECIMENS {
+                            option { key: "{id}", value: "{id}", "{id}" }
+                        }
+                    }
+                }
+            }
+            div { class: "shader-mode-pills", role: "group", aria_label: "HOLO shader visualization",
+                for choice in HoloShaderVisualizationMode::ALL {
+                    button {
+                        key: "{choice.code()}",
+                        class: "ribbon-btn",
+                        r#type: "button",
+                        aria_pressed: if choice == mode { "true" } else { "false" },
+                        onclick: move |_| state.write().holo_shader_mode = Some(choice),
+                        "{choice.title()}"
+                    }
+                }
+            }
+            object {
+                class: "holo-viewport-object",
+                tabindex: "0",
+                "aria-label": "Holographic projection. Drag to orbit, scroll to zoom, Space to animate, R to reset.",
+                data: attr,
+            }
+            p { class: "muted", "{display}" }
+            div { class: "input-row",
+                label {
+                    "Harmonic order k={selected_harmonic}"
+                    input {
+                        r#type: "range", min: "0", max: "{harmonic_limit}", step: "1", value: "{selected_harmonic}",
+                        oninput: move |evt| {
+                            if let Ok(k) = evt.value().parse::<u8>() {
+                                let k = k.min(harmonic_limit);
+                                controls(&scale_control).harmonic_k = k;
+                                state.write().holo_scale_k = k;
+                                scale_window.request_redraw();
+                            }
+                        }
+                    }
+                }
+                label {
+                    "Raymarch budget {selected_budget}/{step_limit}"
+                    input {
+                        r#type: "range", min: "1", max: "{step_limit}", step: "1", value: "{selected_budget}",
+                        oninput: move |evt| {
+                            if let Ok(steps) = evt.value().parse::<u32>() {
+                                let steps = steps.clamp(1, step_limit);
+                                controls(&step_control).raymarch_steps = steps;
+                                budget_display.set(steps);
+                                step_window.request_redraw();
+                            }
+                        }
+                    }
+                }
+                button {
+                    r#type: "button", class: "ribbon-btn",
+                    onclick: move |_| {
+                        let animating = {
+                            let mut control = controls(&animate_control);
+                            control.animating = !control.animating;
+                            control.animating
+                        };
+                        state.write().holo_wireframe_animating = animating;
+                        animate_window.request_redraw();
+                    },
+                    "{animate_label}"
+                }
+                button {
+                    r#type: "button", class: "ribbon-btn",
+                    onclick: move |_| {
+                        controls(&reset_control).reset_camera();
+                        window.request_redraw();
+                    },
+                    "Reset Camera"
+                }
+            }
+        }
+    }
+}
+
+#[component]
+pub fn BrowserChoraSurface(state: Signal<ShellState>) -> Element {
+    let shell = state.read();
+    let mode = shell.browser_mode;
+    let target = shell.browser_url.clone();
+    let slot = shell.browser_product.worker_binary_slot.clone();
+    drop(shell);
+    if mode == BrowserExecutionMode::QualiaNative {
+        let specimen_id = if resolve_mode_for_uri(&target, BrowserExecutionMode::TraditionalWeb)
+            == BrowserExecutionMode::QualiaNative
+        {
+            target.clone()
+        } else {
+            String::new()
+        };
+        return rsx! { Holo10dViewport { state, specimen_label: target, specimen_id } };
+    }
+    #[cfg(all(feature = "chora", not(target_arch = "wasm32")))]
+    {
+        let worker_path = std::path::Path::new(&slot);
+        if worker_path.is_absolute() && worker_path.is_file() {
+            return rsx! { TrustedBrowserSurface { key: "{mode.code()}:{slot}", state, slot, mode } };
+        }
+    }
+    rsx! { BridgePreview { mode, slot } }
+}
+
+#[component]
+fn BridgePreview(mode: BrowserExecutionMode, slot: String) -> Element {
+    let mut result = use_signal(|| None::<String>);
+    let cases = [
+        ("qualia-10d", HybridWebCapabilityChannel::Mount10dHoloEmbed),
+        ("solid-ldp", HybridWebCapabilityChannel::SolidDataboxSync),
+        (
+            "commons-receipt",
+            HybridWebCapabilityChannel::CommonsContributionReceipt,
+        ),
+        (
+            "nquin-provenance",
+            HybridWebCapabilityChannel::VerifyQecpCredential,
+        ),
+        (
+            "vibescript-eval",
+            HybridWebCapabilityChannel::GovernedVibeScriptEval,
+        ),
+    ];
+    let selected_mode = mode.title();
+    let worker_slot = if slot.is_empty() {
+        String::from("Worker slot is not configured")
+    } else {
+        slot
+    };
+    let last = result.read().clone();
+    rsx! {
+        section {
+            class: "browser-worker-contract",
+            h4 { "Sibling Worker and Copied-Frame Contract" }
+            p { "{selected_mode} · {worker_slot}" }
+            p { "These tests use a synthetic origin and payload. The VibeScript test evaluates one isolated scalar expression." }
+            div { class: "input-row",
+                for (label, channel) in cases {
+                    button {
+                        key: "{label}", r#type: "button", class: "ribbon-btn",
+                        onclick: move |_| {
+                            const TEST_ORIGIN: &str = "https://preview.invalid";
+                            let response = if let Some(adopted) = session() {
+                                let payload = match channel {
+                                    HybridWebCapabilityChannel::GovernedVibeScriptEval => "= 21 + 21",
+                                    _ => "urn:webizen:preview:public-specimen.10d",
+                                };
+                                let tested = evaluate_hybrid_page_request(mode, &adopted.identifiers, TEST_ORIGIN, channel, payload);
+                                format!("{label}: {} · NQuin48 parity {:016x}", tested.reply_payload, tested.sealed_nquin_parity)
+                            } else {
+                                format!("{label}: launch the adopted host session to test the preview policy")
+                            };
+                            result.set(Some(response));
+                        },
+                        "Test {label}"
+                    }
+                }
+            }
+            if let Some(message) = last {
+                p { role: "status", "{message}" }
+            }
+        }
+    }
+}
+
+#[cfg(all(feature = "chora", not(target_arch = "wasm32")))]
+mod traditional {
+    use super::*;
+    use aether_native::{
+        aether_chora_client::{
+            protocol::{
+                Control, ExecutionProfile, Nonce, ProtocolError, ReplyError, RouteStamp,
+                MAX_URL_BYTES,
+            },
+            ChoraClient,
+        },
+        chora_frame::ChoraFrameWidget,
+    };
+    use std::{
+        path::Path,
+        sync::atomic::{AtomicUsize, Ordering},
+    };
+
+    use webizen_ua_os::MAX_GOVERNED_VIBESCRIPT_CELL_BYTES;
+
+    static NEXT_WORKER_WIDGET: AtomicUsize = AtomicUsize::new(1);
+
+    struct WorkerSession {
+        client: ChoraClient,
+        sent_address: Option<String>,
+    }
+
+    #[derive(Clone, PartialEq, Eq)]
+    struct PendingScript {
+        stamp: RouteStamp,
+        id: Nonce,
+        origin: String,
+        payload: String,
+        expires_at: Instant,
+    }
+
+    fn admitted_https_origin(address: &str, origin: &str) -> bool {
+        url::Url::parse(address)
+            .ok()
+            .filter(|url| url.scheme() == "https")
+            .is_some_and(|url| url.origin().ascii_serialization() == origin)
+    }
+
+    fn check_script_route(
+        worker: &WorkerSession,
+        script: &PendingScript,
+        mode: BrowserExecutionMode,
+        address: &str,
+    ) -> Result<(), ReplyError> {
+        let address = traditional_address(address).map_err(|_| ReplyError::Cancelled)?;
+        if mode != BrowserExecutionMode::HybridAugmented
+            || Instant::now() >= script.expires_at
+            || worker.sent_address.as_deref() != Some(address.as_str())
+            || !admitted_https_origin(&address, &script.origin)
+        {
+            return Err(ReplyError::Cancelled);
+        }
+        match worker.client.stamp() {
+            Ok(stamp) if stamp == script.stamp => Ok(()),
+            Err(ProtocolError::Busy) => Err(ReplyError::Busy),
+            _ => Err(ReplyError::Cancelled),
+        }
+    }
+
+    fn traditional_address(value: &str) -> Result<String, &'static str> {
+        let value = value.trim();
+        if value == "about:blank" {
+            return Ok(value.to_owned());
+        }
+        if value.len() > MAX_URL_BYTES {
+            return Err("The address exceeds the worker limit.");
+        }
+        let parsed = url::Url::parse(value).map_err(|_| "Enter a valid HTTPS or HTTP address.")?;
+        if !matches!(parsed.scheme(), "https" | "http")
+            || !parsed.has_host()
+            || !parsed.username().is_empty()
+            || parsed.password().is_some()
+        {
+            return Err("Enter an HTTPS or HTTP address without embedded credentials.");
+        }
+        if parsed.as_str().len() > MAX_URL_BYTES {
+            return Err("The encoded address exceeds the worker limit.");
+        }
+        Ok(parsed.to_string())
+    }
+
+    #[component]
+    pub(super) fn TrustedBrowserSurface(
+        state: Signal<ShellState>,
+        slot: String,
+        mode: BrowserExecutionMode,
+    ) -> Element {
+        let window = use_window();
+        let running = use_hook(|| Rc::new(RefCell::new(None::<WorkerSession>)));
+        let mut widget_attr = use_signal(|| None::<CustomWidgetAttr>);
+        let mut status = use_signal(|| String::from("Worker is stopped"));
+        let mut pending_script = use_signal(|| None::<PendingScript>);
+        let mut script_notice = use_signal(|| None::<String>);
+
+        use_drop({
+            let running = Rc::clone(&running);
+            move || {
+                if let Some(owned) = running.borrow_mut().take() {
+                    owned.client.shutdown();
+                }
+            }
+        });
+        use_window_event({
+            let running = Rc::clone(&running);
+            move |event, _| {
+                if !matches!(event, WindowEvent::RedrawRequested) {
+                    return;
+                }
+                let mut guard = running.borrow_mut();
+                let Some(owned) = guard.as_mut() else {
+                    return;
+                };
+                let (shell_mode, address) = {
+                    let shell = state.peek();
+                    (shell.browser_mode, shell.browser_url.clone())
+                };
+                let stale = pending_script.peek().as_ref().is_some_and(|request| {
+                    check_script_route(owned, request, shell_mode, &address)
+                        .is_err_and(|error| error != ReplyError::Busy)
+                });
+                if stale {
+                    if let Some(request) = pending_script.take() {
+                        let _ = owned.client.reply(
+                            request.stamp,
+                            request.id,
+                            Err(ReplyError::Cancelled),
+                        );
+                    }
+                }
+                let mut terminal_status = None;
+                for _ in 0..8 {
+                    let Some(envelope) = owned.client.take_event() else {
+                        break;
+                    };
+                    match envelope.message {
+                        Control::PageRequest {
+                            id,
+                            caller,
+                            channel,
+                            payload,
+                        } => {
+                            let supported = channel
+                                == HybridWebCapabilityChannel::GovernedVibeScriptEval
+                                    .spec()
+                                    .channel_id
+                                && !caller.private_browsing
+                                && !payload.is_empty()
+                                && payload.len() <= MAX_GOVERNED_VIBESCRIPT_CELL_BYTES
+                                && payload.bytes().all(|byte| (b' '..=b'~').contains(&byte))
+                                && session().is_some();
+                            if !supported {
+                                let _ =
+                                    owned
+                                        .client
+                                        .reply(envelope.stamp, id, Err(ReplyError::Denied));
+                                continue;
+                            }
+                            let request = PendingScript {
+                                stamp: envelope.stamp,
+                                id,
+                                origin: caller.origin,
+                                payload,
+                                expires_at: Instant::now() + Duration::from_secs(25),
+                            };
+                            if check_script_route(owned, &request, shell_mode, &address)
+                                .is_err_and(|error| error != ReplyError::Busy)
+                            {
+                                let _ = owned.client.reply(
+                                    request.stamp,
+                                    request.id,
+                                    Err(ReplyError::Denied),
+                                );
+                            } else if pending_script.peek().is_some() {
+                                let _ = owned.client.reply(
+                                    request.stamp,
+                                    request.id,
+                                    Err(ReplyError::Busy),
+                                );
+                            } else {
+                                script_notice.set(None);
+                                pending_script.set(Some(request));
+                            }
+                        }
+                        Control::Cancel { id, .. } => {
+                            let cancelled = pending_script.peek().as_ref().is_some_and(|request| {
+                                request.id == id && request.stamp == envelope.stamp
+                            });
+                            if cancelled {
+                                pending_script.set(None);
+                            }
+                        }
+                        Control::Failed { reason } => {
+                            terminal_status = Some(format!("Worker stopped: {reason:?}"));
+                            break;
+                        }
+                        Control::Stopped => {
+                            terminal_status = Some(String::from("Worker stopped"));
+                            break;
+                        }
+                        _ => {}
+                    }
+                }
+                if owned.client.has_exited()
+                    || matches!(owned.client.stamp(), Err(ProtocolError::Closed))
+                {
+                    terminal_status.get_or_insert_with(|| String::from("Worker connection closed"));
+                }
+                if let Some(message) = terminal_status {
+                    if let Some(dead) = guard.take() {
+                        dead.client.shutdown();
+                    }
+                    drop(guard);
+                    widget_attr.set(None);
+                    pending_script.set(None);
+                    status.set(message);
+                    return;
+                }
+                if owned.client.is_ready() {
+                    let next = match traditional_address(&address) {
+                        Err(message) => Some(message.to_owned()),
+                        Ok(address) if owned.sent_address.as_deref() == Some(address.as_str()) => {
+                            Some(String::from("Browser request sent to copied-frame worker"))
+                        }
+                        Ok(address) => match owned.client.navigate(address.clone()) {
+                            Ok(_) => {
+                                owned.sent_address = Some(address);
+                                Some(String::from("Browser request sent to copied-frame worker"))
+                            }
+                            Err(ProtocolError::Busy) => None,
+                            Err(error) => Some(format!("Worker navigation failed: {error}")),
+                        },
+                    };
+                    drop(guard);
+                    if let Some(next) = next {
+                        if *status.peek() != next {
+                            status.set(next);
+                        }
+                    }
+                }
+            }
+        });
+
+        let on_start = Rc::clone(&running);
+        let on_stop = Rc::clone(&running);
+        let approve_worker = Rc::clone(&running);
+        let deny_worker = Rc::clone(&running);
+        let requested_script = pending_script.read().clone();
+        let start_window = Arc::clone(&window);
+        let start_path = slot.clone();
+        let object_attr = widget_attr.read().clone();
+        rsx! {
+            section {
+                class: "browser-worker-surface",
+                p { role: "status", "{status}" }
+                if let Some(attr) = object_attr {
+                    if let Some(request) = requested_script {
+                        {
+                            let origin = request.origin.clone();
+                            let payload = request.payload.clone();
+                            let expected = request.id;
+                            let stamp = request.stamp;
+                            rsx! {
+                                section {
+                                    class: "id-list",
+                                    h5 { "VibeScript page request from {origin}" }
+                                    p { "Allow one isolated scalar evaluation for this page." }
+                                    pre { "{payload}" }
+                                    button {
+                                        r#type: "button", class: "ribbon-btn",
+                                        onclick: move |_| {
+                                            let selected = pending_script.peek().as_ref().filter(|request| {
+                                                request.id == expected && request.stamp == stamp
+                                            }).cloned();
+                                            let Some(request) = selected else { return; };
+                                            let guard = approve_worker.borrow();
+                                            let Some(worker) = guard.as_ref() else { return; };
+                                            let shell = state.peek();
+                                            match check_script_route(worker, &request, shell.browser_mode, &shell.browser_url) {
+                                                Ok(()) => pending_script.set(None),
+                                                Err(ReplyError::Busy) => {
+                                                    script_notice.set(Some(String::from("The worker is busy. Retry this expression.")));
+                                                    return;
+                                                }
+                                                Err(error) => {
+                                                    pending_script.set(None);
+                                                    let _ = worker.client.reply(request.stamp, request.id, Err(error));
+                                                    script_notice.set(Some(String::from("The original page request has expired.")));
+                                                    return;
+                                                }
+                                            }
+                                            let Some(adopted) = session() else {
+                                                let _ = worker.client.reply(request.stamp, request.id, Err(ReplyError::Unavailable));
+                                                return;
+                                            };
+                                            let receipt = evaluate_hybrid_page_request(
+                                                shell.browser_mode,
+                                                &adopted.identifiers,
+                                                &request.origin,
+                                                HybridWebCapabilityChannel::GovernedVibeScriptEval,
+                                                &request.payload,
+                                            );
+                                            let notice = if receipt.permitted {
+                                                let delivered = serde_json::to_string(&receipt).is_ok_and(|reply| {
+                                                    worker.client.reply(request.stamp, request.id, Ok(reply)).is_ok()
+                                                });
+                                                if delivered {
+                                                    format!("VibeScript result sent · NQuin48 parity {:016x}", receipt.sealed_nquin_parity)
+                                                } else {
+                                                    String::from("The page could not receive the VibeScript result.")
+                                                }
+                                            } else {
+                                                let _ = worker.client.reply(request.stamp, request.id, Err(ReplyError::Denied));
+                                                receipt.reply_payload
+                                            };
+                                            script_notice.set(Some(notice));
+                                        },
+                                        "Evaluate Once"
+                                    }
+                                    button {
+                                        r#type: "button", class: "ribbon-btn",
+                                        onclick: move |_| {
+                                            let matches = pending_script.peek().as_ref().is_some_and(|request| {
+                                                request.id == expected && request.stamp == stamp
+                                            });
+                                            if matches {
+                                                if let (Some(worker), Some(request)) = (deny_worker.borrow().as_ref(), pending_script.take()) {
+                                                    let _ = worker.client.reply(request.stamp, request.id, Err(ReplyError::Denied));
+                                                }
+                                            }
+                                        },
+                                        "Decline"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if let Some(notice) = script_notice.read().as_ref() {
+                        p { role: "status", "{notice}" }
+                    }
+                    object {
+                        class: "chora-frame-object",
+                        style: "display: block; width: 100%; height: 350px;",
+                        tabindex: "0",
+                        "aria-label": "Interactive traditional web view",
+                        data: attr,
+                    }
+                    button {
+                        r#type: "button", class: "ribbon-btn",
+                        onclick: move |_| {
+                            if let Some(owned) = on_stop.borrow_mut().take() { owned.client.shutdown(); }
+                            widget_attr.set(None);
+                            pending_script.set(None);
+                            script_notice.set(None);
+                            status.set(String::from("Worker stopped"));
+                        },
+                        "Stop Worker"
+                    }
+                } else {
+                    p { "Start the installed worker only for pages you choose to trust. It uses a separate process and has no OS containment." }
+                    button {
+                        r#type: "button", class: "ribbon-btn",
+                        onclick: move |_| {
+                            if on_start.borrow().is_some() { return; }
+                            if let Err(message) = traditional_address(&state.peek().browser_url) {
+                                status.set(message.to_owned());
+                                return;
+                            }
+                            match ChoraClient::launch(Path::new(&start_path), ExecutionProfile::TrustedEmbedding, false) {
+                                Ok(client) => {
+                                    let id = NEXT_WORKER_WIDGET.fetch_add(1, Ordering::Relaxed);
+                                    widget_attr.set(Some(CustomWidgetAttr::with_stable_id(id, ChoraFrameWidget::new(client.clone(), peniko::ImageAlphaType::Alpha))));
+                                    *on_start.borrow_mut() = Some(WorkerSession { client, sent_address: None });
+                                    status.set(String::from("Starting copied-frame worker"));
+                                    start_window.request_redraw();
+                                }
+                                Err(error) => status.set(format!("Worker launch failed: {error}")),
+                            }
+                        },
+                        "Start Trusted Worker"
+                    }
+                    BridgePreview { mode, slot: slot.clone() }
+                }
+            }
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn script_approval_matches_an_exact_https_origin() {
+            assert!(admitted_https_origin(
+                "https://example.org/a",
+                "https://example.org"
+            ));
+            assert!(admitted_https_origin(
+                "https://example.org:8443/a",
+                "https://example.org:8443"
+            ));
+            for (address, origin) in [
+                ("http://example.org/a", "http://example.org"),
+                ("https://example.org:8443/a", "https://example.org"),
+                ("https://example.org/a", "https://example.org.evil"),
+                ("https://example.org/a", "null"),
+            ] {
+                assert!(!admitted_https_origin(address, origin));
+            }
+        }
+
+        #[test]
+        fn worker_address_accepts_only_bounded_legacy_routes() {
+            assert_eq!(
+                traditional_address(" https://example.org ").unwrap(),
+                "https://example.org/"
+            );
+            assert_eq!(traditional_address("about:blank").unwrap(), "about:blank");
+            for address in [
+                "qualia://chora/universe",
+                "file:///tmp/file",
+                "https://user:secret@example.org",
+                "http://#",
+                "about:config",
+            ] {
+                assert!(traditional_address(address).is_err());
+            }
+            assert!(traditional_address(&format!(
+                "https://example.org/{}",
+                "a".repeat(MAX_URL_BYTES)
+            ))
+            .is_err());
+        }
+    }
+}
+
+#[cfg(all(feature = "chora", not(target_arch = "wasm32")))]
+use traditional::TrustedBrowserSurface;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn uniform_is_two_lanes_and_caps_the_harmonic_and_raymarch_budgets() {
+        let mut view = HoloViewportControl::new(u8::MAX, false);
+        view.raymarch_steps = u32::MAX;
+        view.mode = HoloShaderVisualizationMode::AnatomicalRadialDepth;
+        let block = uniform_data(&view, 320, 240, 0.125);
+        assert_eq!(block.len(), 32);
+        let lanes = block
+            .chunks_exact(4)
+            .map(|bytes| u32::from_le_bytes(bytes.try_into().unwrap()))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            &lanes[3..6],
+            &[
+                0.125_f32.to_bits(),
+                320.0_f32.to_bits(),
+                240.0_f32.to_bits()
+            ]
+        );
+        assert_eq!(lanes[7] & 63, 32);
+        assert_eq!((lanes[7] >> 6) & 7, 4);
+        assert_eq!((lanes[7] >> 9) & 3, 2);
+        assert_eq!(lanes[6] & 1023, 716);
+    }
+
+    #[test]
+    fn controls_keep_projection_finite_and_reset_the_camera() {
+        let mut view = HoloViewportControl::new(2, true);
+        let initial = view.project(CORNERS[0]);
+        view.orbit(80.0, -200.0);
+        view.zoom_by(2000.0);
+        assert!(view.project(CORNERS[0]).into_iter().all(f32::is_finite));
+        assert_ne!(view.project(CORNERS[0]), initial);
+        view.reset_camera();
+        assert_eq!(view.project(CORNERS[0]), initial);
+        assert_eq!(PROXY_TRIANGLES.len(), 12);
+    }
+}

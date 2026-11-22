@@ -1,0 +1,49 @@
+requires [capability("capability.invoke")];
+let layout={
+  viewport_width:1024,
+  viewport_height:640,
+  boxes:[
+    {id:"halo",role:"sidebar",label:"SETTINGS\n10 Sections\n\n1. Setup Health\n2. Data & Memory\n3. AI Instruments\n4. People & QDNF\n5. Privacy/Sanctuary\n6. Appearance/A11y\n7. Person & Devices\n8. Backup & Solid\n9. Services/SKU\n10. Technical/ABI",x:0,y:0,width:146,height:600,state:"active"},
+    {id:"header",role:"header",label:"SETTINGS & FOUNDATIONAL ENVIRONMENT  ·  FOUR-PLANE IDENTIFIER FABRIC  ·  DUAL-SKU DELIVERY",x:156,y:8,width:858,height:36,state:"active"},
+    {id:"p1",role:"card",label:"PLANE 1: NaturalAgent (who)\n\nPeople & Living Beings (living-SHACL)\nDisjoint from owl:Thing. Never Thing/Object/DID.\nOS account is NOT principal identity.",x:156,y:54,width:420,height:126,state:"focus"},
+    {id:"p2",role:"card",label:"PLANE 2: ClaimOpinion (claim)\n\nClaims, Opinions & CoAttestationBundle\nBounded validity (not_before..expires_at).\nVC proves issuer origin & integrity, not claim truth.",x:594,y:54,width:420,height:126,state:"default"},
+    {id:"p3",role:"card",label:"PLANE 3: SpatiotemporalHandle (handle)\n\nWhere & When Now (DNI · CB-USRI · QRC)\ndid:q42 = Storage / Topological Coordinate (QRC).\nNever human identity.",x:156,y:190,width:420,height:126,state:"default"},
+    {id:"p4",role:"card",label:"PLANE 4: Instrument (tool)\n\nCryptographic Tools & Hardware Sensors\ndid:qi · Pairwise locators · WalletShape · SensorId\nEnumerated Identity noisy-OR confidence < 1.0.",x:594,y:190,width:420,height:126,state:"hover"},
+    {id:"sanct",role:"panel",label:"SANCTUARY VAULT (VaultContainerV2) & ANVIL NP64\n\n4-Slot Constant-Shape CBOR (Real / Decoy / Reserved)\nArgon2id (64 MiB) + AES-256-GCM + Audit DAG\nAnvil NP64 fail-closed hardware attestation gate\nADR 0011 Dead-Man & Incapacity Switches",x:156,y:326,width:420,height:136,state:"default"},
+    {id:"models",role:"panel",label:"LOCAL AI INSTRUMENTS & 42 MiB SENTINEL\n\nEtalon Native GPU (.p64 v4 16 KiB pages & .gguf)\nPrivate reversible readiness probe + N3Logic gate\n42 MiB Zero-Heap SlgArena (917,504 NQuin48 slots)\n6 Core Semantic Instruments + 40 Formal Logics",x:594,y:326,width:420,height:136,state:"default"},
+    {id:"sku",role:"panel",label:"DUAL-SKU DELIVERY & THREE-RING LICENCE FENCE\n\nSKU A: Guest OS Installer + Ed25519 Self-Updater (C7)\nSKU B: Debian 13 Trixie Appliance (systemd + cage)\nRing A (OS) · Ring B (CC BY-NC-ND 4.0) · Ring C (MPL-2.0 WWW Worker) · W3C Solid Off-Ramp",x:156,y:472,width:858,height:118,state:"active"},
+    {id:"footer",role:"footer",label:"Four-Plane Fabric Locked  ·  Live vs Planned Honesty Only (Zero Held Theatre)  ·  Native Etalon Vulkan",x:0,y:600,width:1024,height:40,state:"default"}
+  ]
+};
+let theme = capability.invoke("hypermedia.layout.bind_theme_scope", {
+  scope:"environment",
+  mode:"holosonic-dark",
+  accent:[77,184,255,255],
+  corner_radius:16.0
+});
+let ui = capability.invoke("hypermedia.layout.render_ui_sheet", {layout:layout,theme:theme,font:"ui-font.ttf",scale:1.0});
+let png = capability.invoke("hypermedia.radiance.encode_rgba_png", {image:ui});
+let svg = capability.invoke("hypermedia.layout.project_ui_svg", {layout:layout,theme:theme,font:"ui-font.ttf",scale:1.0});
+let diegetic = capability.invoke("hypermedia.layout.project_diegetic_surface", {
+  ui_image:ui,
+  viewport_width:1024,
+  viewport_height:640,
+  yaw_deg:-6.0,
+  pitch_deg:5.0,
+  pick_screen_xy:[512.0,320.0]
+});
+let diegeticPng = capability.invoke("hypermedia.radiance.encode_rgba_png", {image:diegetic.projected_rgba});
+let gallery = capability.invoke("hypermedia.discourse.review_gallery", {
+  title:"Webizen OS-Shell — 10-Section Settings & Four-Plane Identifier Fabric",
+  files:[
+    {name:"foundations-sheet.png",resource:png},
+    {name:"foundations-sheet.svg",resource:svg},
+    {name:"foundations-diegetic.png",resource:diegeticPng}
+  ]
+});
+let asset={files:[
+  {key:"foundations-sheet.png",resource:png},
+  {key:"foundations-sheet.svg",resource:svg},
+  {key:"foundations-diegetic.png",resource:diegeticPng},
+  {key:"review-gallery.html",resource:gallery}
+]};

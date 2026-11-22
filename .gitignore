@@ -1,5 +1,11 @@
 target/
+/target-*/
+**/target/
+**/target-*/
 /target-c1/
+/target-c0/
+/target-gpu/
+assets/ui-font.ttf
 Cargo.lock
 dist/
 *.qpkg

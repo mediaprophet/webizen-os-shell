@@ -1,0 +1,49 @@
+requires [capability("capability.invoke")];
+let layout={
+  viewport_width:1024,
+  viewport_height:640,
+  boxes:[
+    {id:"sections",role:"sidebar",label:"SEMANTIC FS\nSections\n\nAll Resources\nSecret (Sanct)\nWellFair/Care\nPersonal Shelf\nWork/Projects\nTools/Logs\nSoftware/AI\nCommons Share",x:0,y:0,width:144,height:600,state:"active"},
+    {id:"header",role:"header",label:"LIBRARY  ·  SEMANTIC FILE-SYSTEM  ·  OPT-IN POET TOOLCHEST  ·  8-SECTOR COMMAND ORB",x:154,y:8,width:860,height:36,state:"active"},
+    {id:"toolchest",role:"panel",label:"OPT-IN SEMANTIC TOOLCHEST  (Poet Shed Pattern — Elect Toolboxes to Enable Extractors & Facets)\n[ON] 10D v2 HOLO Assembly (AREF/IOVR/INST) & L0-L6 Strata   ·   [OPT-IN] Holosonic .qac, SonicToken & Bioacoustics\n[ON] Temporal Timeline Slider, Allen Intervals & GeoSPARQL  ·   [OPT-IN] Anatomical Cavity SDF & DICOM LPS Atlas\n[ON] CML (TEXT->CONCEPT->LOGIC), Hohfeld Norms & QECP       ·   [OPT-IN] 9-Stage Contribution & Solid Off-Ramp",x:154,y:50,width:860,height:104,state:"focus"},
+    {id:"facets",role:"panel",label:"MULTI-DIMENSIONAL FACETS  (AND across dimensions · OR within dimension · Temporal Window Active)\n[Entities Inside (depicts)]: cervical-c1-atlas · maternal-fetal-dyad · eucalyptus-camaldulensis · solar-microgrid\n[Topics / Projects / Timeline]: anatomy · biology · engineering · finance · Timeline >= 1763600000",x:154,y:162,width:860,height:82,state:"default"},
+    {id:"c1",role:"card",label:"Visible Human Cervical (C1/C2)\n.10d v2 HOLO · Section: wellfair\nDepicts: cervical-c1-atlas, L0-L6\n13 NQuin48 edges · Canberra",x:154,y:252,width:278,height:116,state:"hover"},
+    {id:"c2",role:"card",label:"River Red Gum Biosphere Twin\n.hmc / .10d · Section: commons\nDepicts: eucalyptus, sonic-token\n10 NQuin48 edges · Talbingo B72",x:445,y:252,width:278,height:116,state:"default"},
+    {id:"c3",role:"card",label:"QECP C2PA Credential PDF\n.pdf+qecp · Section: personal\nDepicts: c2pa-qecp, hepatocyte\n11 NQuin48 edges · Brisbane",x:736,y:252,width:278,height:116,state:"default"},
+    {id:"inspector",role:"panel",label:"SEMANTIC CONTAINER GRAPH & LINEAGE INSPECTOR  +  [EXECUTE ACTIVE TOOLCHEST TOOLBOXES]\nPrimary Subject: 0x0a4f...  ·  prov:wasDerivedFrom -> urn:doi:10.57967/hf/10464#visible-human-ct\nBundled Roles: [Primary: .10d HOLO 0x0306] · [Source: DICOM CT] · [Analysis: Cutaways] · [Provenance: .q42]\nToolChain: hypermedia.locus.compile_10d_holo -> ComputationalGeometry.svo_raycast -> apply_rotor",x:154,y:376,width:860,height:122,state:"focus"},
+    {id:"ingest",role:"panel",label:"LIVE SEMANTIC INGESTION PIPELINE  (Ingest Derives Searchability + Guardianship Watch-Flags)\nURI + Media Type -> Extracts Topics · Depicted Entities · CML · COF Segments · 48B NQuin48  |  [classified] -> Secret",x:154,y:506,width:860,height:84,state:"active"},
+    {id:"footer",role:"footer",label:"Opt-In Poet ToolChest  ·  Graph of NQuin48 Edges (Never Folders)  ·  Entity & Feature Discovery  ·  Etalon Native",x:0,y:600,width:1024,height:40,state:"default"}
+  ]
+};
+let theme = capability.invoke("hypermedia.layout.bind_theme_scope", {
+  scope:"environment",
+  mode:"holosonic-dark",
+  accent:[47,224,200,255],
+  corner_radius:16.0
+});
+let ui = capability.invoke("hypermedia.layout.render_ui_sheet", {layout:layout,theme:theme,font:"ui-font.ttf",scale:1.0});
+let png = capability.invoke("hypermedia.radiance.encode_rgba_png", {image:ui});
+let svg = capability.invoke("hypermedia.layout.project_ui_svg", {layout:layout,theme:theme,font:"ui-font.ttf",scale:1.0});
+let diegetic = capability.invoke("hypermedia.layout.project_diegetic_surface", {
+  ui_image:ui,
+  viewport_width:1024,
+  viewport_height:640,
+  yaw_deg:6.0,
+  pitch_deg:-4.0,
+  pick_screen_xy:[512.0,320.0]
+});
+let diegeticPng = capability.invoke("hypermedia.radiance.encode_rgba_png", {image:diegetic.projected_rgba});
+let gallery = capability.invoke("hypermedia.discourse.review_gallery", {
+  title:"Webizen OS-Shell — Semantic File-System & Opt-In Poet ToolChest",
+  files:[
+    {name:"library-sheet.png",resource:png},
+    {name:"library-sheet.svg",resource:svg},
+    {name:"library-diegetic.png",resource:diegeticPng}
+  ]
+});
+let asset={files:[
+  {key:"library-sheet.png",resource:png},
+  {key:"library-sheet.svg",resource:svg},
+  {key:"library-diegetic.png",resource:diegeticPng},
+  {key:"review-gallery.html",resource:gallery}
+]};

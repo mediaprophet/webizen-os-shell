@@ -1,0 +1,48 @@
+requires [capability("capability.invoke")];
+let layout={
+  viewport_width:1024,
+  viewport_height:640,
+  boxes:[
+    {id:"halo",role:"sidebar",label:"WEBIZEN\nAI Vault\n\n[P64 v4]\n16KiB Page\nGGUF Purge\n84.5 tok/s\n\n[Agents]\nSub-Agent\nPlane 4 Tool\n\n[Ext MCP]\nTCP/Stdio\nHTTP+Nym",x:0,y:0,width:116,height:600,state:"active"},
+    {id:"header",role:"header",label:"LLM (.GGUF -> .P64) CONVERSION & PURGE  ·  GOVERNED AGENT ROSTER  ·  EXTERNAL MCP ACCOUNTS",x:126,y:8,width:888,height:36,state:"active"},
+    {id:"p64",role:"panel",label:"1. LOCAL .GGUF -> .P64 (16 KiB PAGE-ALIGNED) CONVERSION & SOURCE GGUF REMOVAL PIPELINE\nActive Resident: qwen2.5-coder-7b-instruct-q4_k_m.p64 (4,450 MiB · 128 NQuin48 Tensor Pointers · 84.5 tok/s · KV-Cache 512 MiB)\nReclaimed Disk: 9,145 MiB freed by physically deleting redundant .gguf files after SHA3-256 & 16 KiB page-alignment verification",x:126,y:50,width:888,height:80,state:"default"},
+    {id:"m1",role:"card",label:"LOCAL P64 VAULT #1\nqwen2.5-coder-7b.p64\n\nState: ActiveResident\nFormat: P64 v4 (p64\\0)\nSource .gguf: REMOVED\nTask: Coding & N3 Logic\nResidency: KeepWarm VRAM",x:126,y:138,width:288,height:164,state:"focus"},
+    {id:"m2",role:"card",label:"LOCAL P64 VAULT #2\nqualia-ambient-lod3-15m.p64\n\nState: MappedToDisk\nFormat: P64 v4 (15 MiB)\nSource .gguf: REMOVED\nTask: Mobile AVF / Low-RAM\nResidency: PinnedInVram",x:426,y:138,width:288,height:164,state:"hover"},
+    {id:"m3",role:"card",label:"GOVERNED AGENT ROSTER\n(Plane 4 Instrument)\n\n1. local-sanctuary-steward\n   (Ceiling=255 · 0 Egress)\n2. poet-synth-architect\n3. external-mcp-delegate\n   (Ceiling=64 · DID Strip)",x:726,y:138,width:288,height:164,state:"default"},
+    {id:"ext",role:"panel",label:"2. EXTERNAL LLM PLATFORM ACCOUNTS, DEONTIC EGRESS RULES & MCP INTERFACES (TCP / Stdio / Streamable-HTTP)\n• Anthropic Claude (claude-opus-4-6) -> MCP HTTP + KeyVault Ref · MaxSensitivity<=64 (Commons) · Strip did:qi=true · Nym Mixnet=true\n• Google Gemini (gemini-2.5-pro)     -> MCP Stdio Subprocess · MaxSensitivity<=64 · Allowed Tools: [llm_infer, synth_produce_present]\n• xAI Grok (Quarantined Public-Only) -> MaxSensitivity=0 (Public Only) · Anti-Recon & Auth-Fabric/Sentinel Exfiltration Firewall=ON",x:126,y:310,width:888,height:132,state:"focus"},
+    {id:"log",role:"panel",label:"3. CROSS-VOLUME AGENT INVOCATION & T59 BEHAVIOURAL AUDIT LOG  (Talk · Poet · Browser · Library · WellFair · Admin)\n[PERMITTED · Local .p64] local-sanctuary-steward in WellFair (sens=255) -> Processed inside EL2/Local Arena (0 Bytes Outbound Egress)\n[PERMITTED · Ext MCP]   external-mcp-research-delegate in Poet (sens=0) -> JSON-RPC tools/call 'llm_infer' (did:qi:alice redacted)\n[BLOCKED · DeonticInterrupt] External Grok MCP attempted auth-fabric / Sentinel schema probe -> Halted & Flagged in T59 Characteristics",x:126,y:450,width:888,height:140,state:"active"},
+    {id:"footer",role:"footer",label:".gguf -> 16 KiB .p64 v4 + GGUF Purge  ·  Per-Principal Sub-Agent Roster  ·  External MCP Accounts & Anti-Recon Firewall",x:0,y:600,width:1024,height:40,state:"default"}
+  ]
+};
+let theme = capability.invoke("hypermedia.layout.bind_theme_scope", {
+  scope:"environment",
+  mode:"holosonic-dark",
+  accent:[77,184,255,255],
+  corner_radius:16.0
+});
+let ui = capability.invoke("hypermedia.layout.render_ui_sheet", {layout:layout,theme:theme,font:"ui-font.ttf",scale:1.0});
+let png = capability.invoke("hypermedia.radiance.encode_rgba_png", {image:ui});
+let svg = capability.invoke("hypermedia.layout.project_ui_svg", {layout:layout,theme:theme,font:"ui-font.ttf",scale:1.0});
+let diegetic = capability.invoke("hypermedia.layout.project_diegetic_surface", {
+  ui_image:ui,
+  viewport_width:1024,
+  viewport_height:640,
+  yaw_deg:-5.0,
+  pitch_deg:4.0,
+  pick_screen_xy:[512.0,320.0]
+});
+let diegeticPng = capability.invoke("hypermedia.radiance.encode_rgba_png", {image:diegetic.projected_rgba});
+let gallery = capability.invoke("hypermedia.discourse.review_gallery", {
+  title:"LLM (.gguf -> .p64) Conversion & Purge, Governed Agent Roster & External MCP Accounts",
+  files:[
+    {name:"llm-management-sheet.png",resource:png},
+    {name:"llm-management-sheet.svg",resource:svg},
+    {name:"llm-management-diegetic.png",resource:diegeticPng}
+  ]
+});
+let asset={files:[
+  {key:"llm-management-sheet.png",resource:png},
+  {key:"llm-management-sheet.svg",resource:svg},
+  {key:"llm-management-diegetic.png",resource:diegeticPng},
+  {key:"review-gallery.html",resource:gallery}
+]};
