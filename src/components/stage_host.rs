@@ -8,13 +8,13 @@ use super::volumes::{
     poet_synth::{AnatomyVolume, PoetSynthVolume},
     projects::ProjectsVolume,
     sanctuary::SanctuaryVolume,
-    settings::SettingsVolume,
+    settings::{control_center_storage, SettingsVolume, WorkspaceSave},
     wallet::WalletVolume,
     wellfair::WellfairVolume,
 };
-use crate::state::{ShellState, StageChromeMode, VolumeStage};
+use crate::state::{session, SettingsSection, ShellState, StageChromeMode, VolumeStage};
 use aether::prelude::*;
-use webizen_ua_os::IdentifierFabricPlane;
+use webizen_ua_os::{IdentifierFabricPlane, OsJobStatus};
 
 #[component]
 pub fn StageHost(mut state: Signal<ShellState>) -> Element {
@@ -31,6 +31,9 @@ pub fn StageHost(mut state: Signal<ShellState>) -> Element {
     let inspect_open = s.inspect_continuity_open;
     let orb_toast = s.orb_toast.clone();
     let chrome_mode = s.stage_chrome_mode;
+    let control_center_open = s.control_center_drawer_open;
+    let renderer = s.renderer_health.clone();
+    let (width, height) = renderer.viewport_dimensions;
     drop(s);
 
     let parity_str = if parity_ok { "VERIFIED" } else { "PLANNED" };
@@ -158,19 +161,145 @@ pub fn StageHost(mut state: Signal<ShellState>) -> Element {
             section {
                 id: "gpu",
                 role: "region",
-                aria_label: "GPU viewport hook",
+                aria_label: "GPU and renderer health",
                 div {
-                    h3 { "GPU Stage · Etalon Native Mode (Vulkan / DX12)" }
+                    h3 { "GPU Stage · Renderer Health" }
                     p {
                         "Adapter: "
-                        span { class: "pill live", "NATIVE_DESKTOP" }
+                        span { class: "pill plane", "NATIVE_DESKTOP" }
                         " — {gpu} · NQuin48 wire parity: {parity_str} · {providers} native Vibe providers · 150 hypermedia.* morphisms."
                     }
+                }
+                dl {
+                    class: "renderer-health",
+                    dt { "Backend" }
+                    dd { "{renderer.backend_label}" }
+                    dt { "Fallback policy" }
+                    dd { "{renderer.fallback_policy_label}" }
+                    dt { "Fallback engaged" }
+                    dd { if renderer.fallback_engaged { "Yes" } else { "No" } }
+                    dt { "HOLO surface" }
+                    dd { "{renderer.active_holo_surface_status}" }
+                    dt { "Viewport" }
+                    dd { "{width} × {height} px" }
                 }
                 if !orb_toast.is_empty() {
                     span { class: "pill plane", "{orb_toast}" }
                 }
             }
+            if control_center_open {
+                OsControlCenterDrawer { state }
+            }
+        }
+    }
+}
+
+#[component]
+fn OsControlCenterDrawer(mut state: Signal<ShellState>) -> Element {
+    let shell = state.read();
+    let queued_count = shell
+        .os_control_center
+        .jobs
+        .iter()
+        .filter(|job| job.status == OsJobStatus::Queued)
+        .count();
+    let blocked_count = shell
+        .os_control_center
+        .jobs
+        .iter()
+        .filter(|job| job.status == OsJobStatus::Blocked)
+        .count();
+    let running: Vec<_> = shell
+        .os_control_center
+        .jobs
+        .iter()
+        .filter(|job| job.status == OsJobStatus::Running)
+        .map(|job| (job.job_id.clone(), job.title.clone()))
+        .collect();
+    let load_error = shell.os_control_center_error.clone();
+    let can_edit = load_error.is_none() && session().is_some();
+    let mut notifications: Vec<_> = shell
+        .os_control_center
+        .notifications
+        .iter()
+        .filter(|notice| !notice.acknowledged)
+        .cloned()
+        .collect();
+    drop(shell);
+    notifications.sort_by_key(|notice| std::cmp::Reverse(notice.severity));
+    let mut status = use_signal(String::new);
+
+    rsx! {
+        aside {
+            id: "os-control-center-drawer",
+            class: "os-control-center-drawer id-list",
+            aria_labelledby: "os-control-center-heading",
+            div {
+                class: "control-center-heading input-row",
+                h4 { id: "os-control-center-heading", "OS Control Center" }
+                button {
+                    r#type: "button",
+                    onclick: move |_| state.write().control_center_drawer_open = false,
+                    "Close"
+                }
+            }
+            p { "{running.len()} running · {queued_count} queued · {blocked_count} blocked · {notifications.len()} unread notifications" }
+            if !running.is_empty() {
+                ul { aria_label: "Running jobs",
+                    for (job_id, title) in running {
+                        li { key: "{job_id}", "{title}" }
+                    }
+                }
+            }
+            if let Some(error) = load_error {
+                p { class: "path", role: "status", "Control Center is read-only: {error}" }
+            }
+            if notifications.is_empty() {
+                p { class: "muted", "No unread notifications." }
+            }
+            ul {
+                for notice in notifications {
+                    {
+                        let id = notice.notification_id.clone();
+                        let severity = notice.severity.label();
+                        rsx! {
+                            li {
+                                key: "{notice.notification_id}",
+                                strong { "{severity} · {notice.title}" }
+                                p { "{notice.detail}" }
+                                button {
+                                    r#type: "button",
+                                    disabled: !can_edit,
+                                    onclick: move |_| {
+                                        let result = control_center_storage(state).and_then(|storage| {
+                                            state.write().os_control_center
+                                                .acknowledge_notification(storage, &id)
+                                        });
+                                        status.set(match result {
+                                            Ok(()) => "Notification acknowledged. Its source record is unchanged.".into(),
+                                            Err(error) => error,
+                                        });
+                                    },
+                                    "Mark read"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            button {
+                r#type: "button",
+                class: "ribbon-btn",
+                onclick: move |_| {
+                    let mut shell = state.write();
+                    shell.current_stage = VolumeStage::Settings;
+                    shell.active_plane = VolumeStage::Settings.primary_plane();
+                    shell.settings_section = SettingsSection::Services;
+                    shell.control_center_drawer_open = false;
+                },
+                "Open jobs and capability settings"
+            }
+            p { class: "muted", role: "status", "{status}" }
         }
     }
 }
@@ -279,12 +408,15 @@ fn CommandOrbBar(mut state: Signal<ShellState>) -> Element {
                     onclick: move |_| {
                         let mut s = state.write();
                         s.current_stage = VolumeStage::Settings;
+                        s.active_plane = VolumeStage::Settings.primary_plane();
+                        s.settings_section = SettingsSection::Services;
                         s.orb_open = false;
                         s.orb_toast = "Orb Sector 8 · Opened volume capability & lease settings".into();
                     },
                     "8. ··· More"
                 }
             }
+            WorkspaceSave { state }
             if let Some(bridge) = auxiliary {
                 {
                     let orb = bridge.clone();
@@ -359,7 +491,7 @@ fn EmptyManifold(mut state: Signal<ShellState>, gpu: String) -> Element {
                     class: "gpu-banner",
                     div {
                         strong { "Etalon Native GPU Stage · {gpu}" }
-                        span { " — Spatial depth manifold (Not OSX / Windows / Linux chrome). Humans-first halo. Poet 8-sector command orb." }
+                        span { " — Spatial depth manifold (Not OSX / Windows / Linux chrome). Humans-first halo. Poet 8-Sector Command Orb." }
                     }
                     span { class: "pill live", "{summary_right}" }
                 }

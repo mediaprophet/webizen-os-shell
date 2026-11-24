@@ -10,8 +10,9 @@ use super::poet_synth::resource_clipboard_notice;
 use crate::components::viewports::BrowserChoraSurface;
 use crate::state::{session, ShellState};
 use webizen_ua_os::{
-    evaluate_hybrid_page_request, resolve_mode_for_uri, upgrade_browser_product_independent,
-    BrowserExecutionMode, HybridWebCapabilityChannel, SocialDisclosureScope, UaOsHost,
+    evaluate_hybrid_page_request_in_storage, resolve_mode_for_uri,
+    upgrade_browser_product_independent, BrowserExecutionMode, HybridWebCapabilityChannel,
+    SocialDisclosureScope, UaOsHost,
 };
 
 #[component]
@@ -302,7 +303,7 @@ pub fn BrowserVolume(mut state: Signal<ShellState>) -> Element {
                 h4 { "Mode 3 Hybrid Bridge · QualiaDB Capabilities in Traditional Web Pages (Control::PageRequest -> Host Sentinel Gate -> PageReply)" }
                 p {
                     class: "muted",
-                    "Preview the host's routing decision for a page capability request. Mode 1 refuses bridge requests. In Mode 3, this check records the evaluator's decision and NQuin48 parity."
+                    "Run bounded local checks with fixed samples. Mode 1 refuses bridge requests. A live page still needs a separate host grant."
                 }
                 div {
                     class: "plane-grid",
@@ -321,19 +322,19 @@ pub fn BrowserVolume(mut state: Signal<ShellState>) -> Element {
                                         class: "sanctum-issue",
                                         onclick: move |_| {
                                             if let Some(sess) = session() {
-                                                let cur_mode = state.read().browser_mode;
-                                                let cur_origin = state.read().browser_url.clone();
-                                                let sample = if ch == HybridWebCapabilityChannel::GovernedVibeScriptEval {
-                                                    "= 21 + 21"
-                                                } else {
-                                                    "urn:poiesis:artefact:offgrid-solar-battery-station.10d"
+                                                let (mode, current_address) = {
+                                                    let shell = state.peek();
+                                                    (shell.browser_mode, shell.browser_url.clone())
                                                 };
-                                                let rec = evaluate_hybrid_page_request(
-                                                    cur_mode,
+                                                let origin = webizen_ua_os::hybrid_https_origin(&current_address)
+                                                    .unwrap_or_else(|| "https://preview.invalid".into());
+                                                let rec = evaluate_hybrid_page_request_in_storage(
+                                                    mode,
                                                     &sess.identifiers,
-                                                    &cur_origin,
+                                                    &sess.host.storage,
+                                                    &origin,
                                                     ch,
-                                                    sample,
+                                                    ch.local_test_payload(),
                                                 );
                                                 state.write().browser_bridge_receipts.insert(0, rec);
                                             }

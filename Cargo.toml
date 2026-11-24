@@ -14,8 +14,8 @@ description = "Webizen OS-Shell: Aether native spatial shell on Etalon native GP
 default = ["native"]
 # Chrome GPU is Etalon Vulkan/DX12 via aether-native vello-hybrid (64-bit host).
 # Do not enable vello-cpu-softbuffer alongside hybrid: CPU overrides hybrid in aether-native.
-native = ["dep:aether", "dep:aether-native", "dep:etalon", "dep:tray-icon", "dep:anyrender", "dep:peniko", "dep:kurbo", "dep:blitz-dom", "dep:blitz-traits"]
-chora = ["native", "aether-native/chora", "dep:url"]
+native = ["dep:aether", "dep:aether-native", "dep:aether-qualia-host", "dep:etalon", "dep:tray-icon", "dep:anyrender", "dep:peniko", "dep:kurbo", "dep:blitz-dom", "dep:blitz-traits"]
+chora = ["native", "aether-native/chora", "aether-qualia-host/chora-client", "dep:url"]
 gpu-cpu-fallback = ["native", "aether-native/gpu-cpu-fallback"]
 
 [[bin]]
@@ -30,6 +30,7 @@ path = "src/bin/webizen-hostd.rs"
 [dependencies]
 aether = { optional = true, path = "../../Aether/packages/aether", default-features = false, features = ["macro", "html", "signals", "hooks", "launch", "native", "refract"] }
 aether-native = { optional = true, path = "../../Aether/packages/native", default-features = false, features = ["vello-hybrid", "system-fonts", "clipboard", "accessibility", "html"] }
+aether-qualia-host = { optional = true, path = "../../Aether/packages/qualia-host" }
 # Feature-unify Etalon backends onto the local 0.0.41.3 tree (Vulkan + DX12 native GPU).
 etalon = { optional = true, git = "https://github.com/mediaprophet/etalon.git", rev = "a8f12b3f769fe7c8f33c6b93fece6aa046f6db16", default-features = false, features = ["std", "vulkan", "dx12", "wgsl"] }
 

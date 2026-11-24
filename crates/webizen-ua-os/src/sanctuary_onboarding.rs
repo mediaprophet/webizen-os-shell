@@ -301,7 +301,7 @@ fn share_commitment(index: u8, share: &[u8; 32]) -> String {
 }
 
 // The caller verifies that share indices are nonzero and distinct.
-fn interpolate_at_zero(shares: &[(u8, [u8; 32])]) -> [u8; 32] {
+pub(crate) fn interpolate_at_zero(shares: &[(u8, [u8; 32])]) -> [u8; 32] {
     let mut output = [0; 32];
     for (index, data) in shares {
         let mut weight = 1;
@@ -318,7 +318,7 @@ fn interpolate_at_zero(shares: &[(u8, [u8; 32])]) -> [u8; 32] {
     output
 }
 
-fn gf_multiply(mut left: u8, mut right: u8) -> u8 {
+pub(crate) fn gf_multiply(mut left: u8, mut right: u8) -> u8 {
     let mut result = 0;
     for _ in 0..8 {
         if right & 1 != 0 {

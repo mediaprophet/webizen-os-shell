@@ -7,15 +7,20 @@ use aether::refract_bridge::RefractStore;
 use std::sync::OnceLock;
 use webizen_ua_os::{
     build_desktop_appliance_profile, build_sanctuary_onboarding_state,
-    core_semantic_instruments_catalog, inspect_browser_product, poet_analyze_and_seal_gazetteer,
-    poet_eval_native_cell, poet_open_lexicon_pack, probe_mobile_avf_sanctuary, probe_only,
-    q_hash_60, sync_fleet_from_fabric, BrowserExecutionMode, BrowserProductStatus,
-    BrowserSocialGraph, DesktopApplianceProfile, DeviceSession, HoloShaderVisualizationMode,
-    HostDaemonStatusSnapshot, HybridBridgeReceipt, HypermediaProduceReceipt, IdentifierFabricPlane,
-    LaunchPlan, LlmAndAgentManagementRegistry, LocalLlmModelEntry, LocalModelReadinessReceipt,
-    MobileAvfSanctuaryProfile, NativeGpuAdapterInfo, NaturalHostStewardshipFabric, OsEnvironment,
-    PoetCellEntry, PoetGazetteerResult, QappRegistryEntry, SanctuaryOnboardingState,
-    SemanticFacetFilter, SemanticFileSystem, Sku, ThreeNodeMeshSimulationReceipt, UaOsHost,
+    core_semantic_instruments_catalog, inspect_browser_product, load_workspace_snapshot,
+    poet_analyze_and_seal_gazetteer, poet_eval_native_cell, poet_open_lexicon_pack,
+    probe_mobile_avf_sanctuary, probe_only, q_hash_60, sync_fleet_from_fabric,
+    AuthoringWorkflowSnapshot, BrowserExecutionMode, BrowserProductStatus, BrowserSocialGraph,
+    CapabilityLeaseScope, ChoraWorkerSupervisorSnapshot, DesktopApplianceProfile, DeviceSession,
+    GovernedVibeActionReport, HoloShaderVisualizationMode, HostDaemonStatusSnapshot,
+    HybridBridgeReceipt, HypermediaProduceReceipt, IdentifierFabricPlane, LaunchPlan,
+    LlmAndAgentManagementRegistry, LocalLlmModelEntry, LocalModelReadinessReceipt,
+    MobileAvfSanctuaryProfile, NativeGpuAdapterInfo, NaturalHostStewardshipFabric,
+    OsControlCenterState, OsEnvironment, PersistedWorkspaceSnapshot, PoetCellEntry,
+    PoetGazetteerResult, QappRegistryEntry, QecpCredentialEnvelope, SanctuaryOnboardingState,
+    SemanticFacetFilter, SemanticFileSystem, SemanticToolboxId, ShamirQ42jBackupArchive,
+    ShellRendererHealthSummary, Sku, SolidTurtleSyncReceipt, ThreeNodeMeshSimulationReceipt,
+    UaOsHost,
 };
 
 static SESSION: OnceLock<DeviceSession> = OnceLock::new();
@@ -97,21 +102,21 @@ impl SettingsSection {
 
     pub const fn search_terms(self) -> &'static str {
         match self {
-            Self::Health => "setup ready attention repair status sentinel foundations",
+            Self::Health => "setup ready attention repair status sentinel foundations renderer GPU backend",
             Self::Data => "data storage path quota memory q42 10d hmc m64 emf qac p64",
             Self::Models => "ai model llm gguf p64 etalon inference readiness probe",
             Self::People => "people network reachability qdnf wireguard nym mesh mail solid",
             Self::Privacy => {
                 "privacy sanctuary vault container argon2id duress anvil deadman incapacity"
             }
-            Self::Appearance => "appearance theme colour contrast accessibility reduced motion",
+            Self::Appearance => "appearance theme colour contrast accessibility reduced motion workspace snapshot save",
             Self::Device => {
                 "person device apparatus fleet four plane naturalagent claim handle instrument"
             }
             Self::Backup => "backup recovery restore export import q42j qnf solid off-ramp",
-            Self::Services => "services daemon updates logs ports qaps dual-sku debian trixie",
+            Self::Services => "services daemon updates logs ports qaps dual-sku debian trixie jobs capability lease notifications",
             Self::Technical => {
-                "advanced technical raw configuration providers shacl semantic instruments"
+                "advanced technical raw configuration providers shacl semantic instruments renderer GPU fallback"
             }
         }
     }
@@ -430,6 +435,17 @@ pub struct ShellState {
     pub mobile_avf: MobileAvfSanctuaryProfile,
     pub desktop_appliance: DesktopApplianceProfile,
     pub host_daemon_snapshot: HostDaemonStatusSnapshot,
+    pub os_control_center: OsControlCenterState,
+    pub os_control_center_error: Option<String>,
+    pub os_job_runner_error: Option<String>,
+    pub control_center_drawer_open: bool,
+    pub chora_supervisor: ChoraWorkerSupervisorSnapshot,
+    pub last_vibe_action_report: Option<GovernedVibeActionReport>,
+    pub last_authoring_snapshot: Option<AuthoringWorkflowSnapshot>,
+    pub last_qecp_envelope: Option<QecpCredentialEnvelope>,
+    pub last_solid_receipt: Option<SolidTurtleSyncReceipt>,
+    pub last_q42j_backup: Option<ShamirQ42jBackupArchive>,
+    pub renderer_health: ShellRendererHealthSummary,
     pub sanctuary_onboarding: SanctuaryOnboardingState,
     pub mesh_simulation: Option<Result<ThreeNodeMeshSimulationReceipt, String>>,
     pub omni_intent_draft: String,
@@ -589,6 +605,17 @@ impl ShellState {
                 Sku::Guest, &unresolved_environment, &unresolved_fabric,
             ),
             host_daemon_snapshot: HostDaemonStatusSnapshot::default(),
+            os_control_center: OsControlCenterState::default(),
+            os_control_center_error: None,
+            os_job_runner_error: None,
+            control_center_drawer_open: false,
+            chora_supervisor: ChoraWorkerSupervisorSnapshot::default(),
+            last_vibe_action_report: None,
+            last_authoring_snapshot: None,
+            last_qecp_envelope: None,
+            last_solid_receipt: None,
+            last_q42j_backup: None,
+            renderer_health: ShellRendererHealthSummary::default(),
             sanctuary_onboarding: SanctuaryOnboardingState::default(),
             mesh_simulation: None,
             omni_intent_draft: String::new(),
@@ -689,7 +716,12 @@ impl ShellState {
             .map(|e| e.asset_uri.clone())
             .unwrap_or_default();
 
-        Self {
+        let (os_control_center, os_control_center_error) =
+            match OsControlCenterState::load_or_seed(&s.host.storage, &s.host_stewardship) {
+                Ok(center) => (center, None),
+                Err(error) => (OsControlCenterState::default(), Some(error)),
+            };
+        let mut shell = Self {
             current_stage: VolumeStage::None,
             active_plane: IdentifierFabricPlane::NaturalAgent,
             settings_section: SettingsSection::Health,
@@ -788,6 +820,17 @@ impl ShellState {
             mobile_avf: probe_mobile_avf_sanctuary(&s.gpu),
             desktop_appliance: build_desktop_appliance_profile(s.sku, &s.os_env, &s.host_stewardship),
             host_daemon_snapshot: HostDaemonStatusSnapshot::from_fabric(&s.host_stewardship),
+            os_control_center,
+            os_control_center_error,
+            os_job_runner_error: None,
+            control_center_drawer_open: false,
+            chora_supervisor: ChoraWorkerSupervisorSnapshot::default(),
+            last_vibe_action_report: None,
+            last_authoring_snapshot: None,
+            last_qecp_envelope: None,
+            last_solid_receipt: None,
+            last_q42j_backup: None,
+            renderer_health: ShellRendererHealthSummary::default(),
             sanctuary_onboarding: build_sanctuary_onboarding_state(
                 &s.identifiers, &s.host_stewardship, &s.gpu,
             ),
@@ -825,8 +868,93 @@ impl ShellState {
             new_ext_mcp_url_input: "https://openrouter.example/api/v1/mcp".into(),
             new_ext_keyvault_ref_input: "keyvault://sanctuary/external-llm/openrouter-work".into(),
             llm_management_toast: String::new(),
+        };
+        if let Some(snapshot) = load_workspace_snapshot(&s.host.storage) {
+            shell.apply_workspace_snapshot(&snapshot);
+            if shell.current_stage == VolumeStage::Poet {
+                shell.active_launch_plan = s.host.launch("Poet", None).ok();
+            }
+        }
+        shell
+    }
+
+    /// Persist only the volume and presentation preferences. Live authority and drafts stay in memory.
+    pub fn to_workspace_snapshot(&self) -> PersistedWorkspaceSnapshot {
+        PersistedWorkspaceSnapshot {
+            active_stage_slug: self.current_stage.workspace_slug().into(),
+            active_plane_code: self.active_plane.code().into(),
+            stage_chrome_mode: match self.stage_chrome_mode {
+                StageChromeMode::DefaultDepth => "default-depth",
+                StageChromeMode::FullStage => "full-stage",
+                StageChromeMode::FloatLayer => "float-layer",
+            }
+            .into(),
+            theme_preset: self.theme_preset.into(),
+            reduced_motion: self.reduced_motion,
+            inspect_continuity_open: self.inspect_continuity_open,
+            active_holo_specimen_id: self.active_holo_specimen_id.clone(),
+            holo_scale_k: self.holo_scale_k.min(4),
+            enabled_toolbox_slugs: self
+                .semantic_fs
+                .enabled_toolboxes
+                .iter()
+                .map(|id| id.spec().slug.to_owned())
+                .collect(),
+            browser_url: self.browser_url.clone(),
+            browser_mode_code: self.browser_mode.code().into(),
         }
     }
+
+    pub fn apply_workspace_snapshot(&mut self, snap: &PersistedWorkspaceSnapshot) {
+        if let Some((stage, _)) = VolumeStage::WORKSPACE_SLUGS
+            .iter()
+            .find(|(_, slug)| *slug == snap.active_stage_slug)
+        {
+            self.current_stage = *stage;
+        }
+        self.active_plane = IdentifierFabricPlane::ALL
+            .into_iter()
+            .find(|plane| plane.code() == snap.active_plane_code)
+            .unwrap_or_else(|| self.current_stage.primary_plane());
+        self.stage_chrome_mode = match snap.stage_chrome_mode.as_str() {
+            "full-stage" => StageChromeMode::FullStage,
+            "float-layer" => StageChromeMode::FloatLayer,
+            _ => StageChromeMode::DefaultDepth,
+        };
+        self.theme_preset = match snap.theme_preset.as_str() {
+            "theme-obsidian" => "theme-obsidian",
+            "theme-commons" => "theme-commons",
+            _ => "theme-holosonic",
+        };
+        self.reduced_motion = snap.reduced_motion;
+        self.inspect_continuity_open = snap.inspect_continuity_open;
+        self.active_holo_specimen_id
+            .clone_from(&snap.active_holo_specimen_id);
+        self.holo_scale_k = snap.holo_scale_k.min(4);
+        self.semantic_fs.enabled_toolboxes = SemanticToolboxId::ALL
+            .into_iter()
+            .filter(|id| {
+                snap.enabled_toolbox_slugs
+                    .iter()
+                    .any(|slug| slug == id.spec().slug)
+            })
+            .collect();
+        self.browser_url.clone_from(&snap.browser_url);
+        self.browser_mode = BrowserExecutionMode::ALL
+            .into_iter()
+            .find(|mode| mode.code() == snap.browser_mode_code)
+            .unwrap_or(BrowserExecutionMode::QualiaNative);
+    }
+
+    /// Read the active installation and latest persisted restrictive policy.
+    pub fn blocks_live_qap_lease(&self, package_id: &str, scope: CapabilityLeaseScope) -> bool {
+        self.os_control_center_error.is_some()
+            || session().is_none_or(|session| {
+                webizen_ua_os::require_qap_capability(&session.host.storage, package_id, scope)
+                    .is_err()
+            })
+    }
+
     /// Rebuild the local fleet and daemon summaries from the latest stewardship records.
     pub fn refresh_host_profiles(&mut self) {
         sync_fleet_from_fabric(&mut self.desktop_appliance, &self.host_stewardship);
@@ -835,6 +963,32 @@ impl ShellState {
 }
 
 impl VolumeStage {
+    const WORKSPACE_SLUGS: [(Self, &'static str); 15] = [
+        (Self::None, "none"),
+        (Self::Talk, "talk"),
+        (Self::Mail, "mail"),
+        (Self::Directory, "directory"),
+        (Self::Browser, "browser"),
+        (Self::Keep, "keep"),
+        (Self::Library, "library"),
+        (Self::Instruments, "instruments"),
+        (Self::Poet, "poet"),
+        (Self::Wellfair, "wellfair"),
+        (Self::Wallet, "wallet"),
+        (Self::Projects, "projects"),
+        (Self::Anatomy, "anatomy"),
+        (Self::Settings, "settings"),
+        (Self::Admin, "admin"),
+    ];
+
+    fn workspace_slug(self) -> &'static str {
+        Self::WORKSPACE_SLUGS
+            .into_iter()
+            .find(|(stage, _)| *stage == self)
+            .map(|(_, slug)| slug)
+            .expect("every shell volume has a workspace slug")
+    }
+
     pub fn title(self) -> &'static str {
         match self {
             VolumeStage::None => "No volume open",
@@ -903,6 +1057,26 @@ impl VolumeStage {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn workspace_restores_only_preferences_and_leaves_live_state_untouched() {
+        let mut original = ShellState::placeholder();
+        original.current_stage = VolumeStage::Library;
+        original.active_plane = IdentifierFabricPlane::ClaimOpinion;
+        original.stage_chrome_mode = StageChromeMode::FloatLayer;
+        original.theme_preset = "theme-commons";
+        original.reduced_motion = true;
+        original.active_holo_specimen_id = "qualia://specimens/example".into();
+        original.holo_scale_k = 3;
+        original.browser_url = "https://example.org/".into();
+        original.browser_mode = BrowserExecutionMode::HybridAugmented;
+        original.control_center_drawer_open = true;
+        let snapshot = original.to_workspace_snapshot();
+        let mut reopened = ShellState::placeholder();
+        reopened.apply_workspace_snapshot(&snapshot);
+        assert_eq!(reopened.to_workspace_snapshot(), snapshot);
+        assert!(!reopened.control_center_drawer_open);
+    }
 
     #[test]
     fn editing_a_quin_word_reseals_only_its_slot() {

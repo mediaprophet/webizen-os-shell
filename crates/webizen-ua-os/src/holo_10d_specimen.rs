@@ -1,19 +1,24 @@
 // Copyright (c) 2026 Timothy Charles Holborn.
 // SPDX-License-Identifier: CC-BY-NC-ND-4.0
 
-//! Webizen's compact .10d v2 specimen profile for the native shader studio.
+//! Local HOLO specimen inspection for the compact Webizen and canonical QualiaDB profiles.
 //!
-//! This profile stores a HOLO projection header rather than QualiaDB's section
-//! table and segment bodies. Its checksums validate the declared projection
-//! inputs. Imported QualiaDB scene containers require the canonical resolver.
+//! Compact files carry projection declarations. MID2 files use QualiaDB's
+//! typed payload codecs to verify authored HOLO, MSTR, AREF, IOVR and INST records.
 
 use std::{
+    collections::BTreeMap,
     fs::{self, File, OpenOptions},
     io::{self, Read, Write},
     path::{Path, PathBuf},
     sync::atomic::{AtomicU64, Ordering},
 };
 
+use qualia_core_db::{
+    container_10d as ten,
+    q42::m64_matter::M64HoloRecord,
+    render::skeletal::{valid_motor, Motor},
+};
 use serde::{Deserialize, Serialize};
 use sha3::{Digest, Sha3_256};
 use vibescript_abi::NQuin48;
@@ -34,6 +39,9 @@ const MAX_HARMONIC_ORDER: u8 = 12;
 const MAX_HOLO_SEGMENTS: u16 = 4096;
 const MAX_WAVEFIELDS: u16 = 1024;
 const SPECIMEN_DIRECTORY: &str = "library/specimens-10d";
+const MAX_CANONICAL_BYTES: usize = 16 * 1024 * 1024;
+const COMPACT_PROFILE: &str = "webizen-compact-10d-v2";
+const CANONICAL_PROFILE: &str = "qualiadb-mid2-10d-v2";
 
 pub const DEFAULT_HOLO_SPECIMENS: [&str; 4] = [
     "chora-spatiotemporal-commons",
@@ -86,6 +94,56 @@ impl HoloShaderVisualizationMode {
     }
 }
 
+/// Shell filter names for the seven level ordinals stored in canonical MSTR rows.
+/// Each authored row retains its original level ordinal.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum MultiScaleStratumLayer {
+    L0Continuum,
+    L1RigidArticulatedPgaXpbd,
+    L2SoftBodyFluid,
+    L3MolecularChemical,
+    L4CellularBiological,
+    L5EcologicalGeomorphic,
+    L6QuantumPhysics,
+}
+
+impl MultiScaleStratumLayer {
+    pub const ALL: [Self; 7] = [
+        Self::L0Continuum,
+        Self::L1RigidArticulatedPgaXpbd,
+        Self::L2SoftBodyFluid,
+        Self::L3MolecularChemical,
+        Self::L4CellularBiological,
+        Self::L5EcologicalGeomorphic,
+        Self::L6QuantumPhysics,
+    ];
+
+    pub const fn code(self) -> &'static str {
+        ["L0", "L1", "L2", "L3", "L4", "L5", "L6"][self as usize]
+    }
+
+    pub const fn title(self) -> &'static str {
+        [
+            "L0 · Continuum",
+            "L1 · Rigid / Articulated PGA / XPBD / SKL2",
+            "L2 · Soft-Body / Fluid",
+            "L3 · Molecular / Chemical",
+            "L4 · Cellular / Biological",
+            "L5 · Ecological / Geomorphic",
+            "L6 · Quantum Physics (Dynamics, Physics & Quantum Chemistry)",
+        ][self as usize]
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ConstituentLeafRef {
+    pub aref_slot: u16,
+    pub child_uri: String,
+    pub stratum: MultiScaleStratumLayer,
+    pub motor_translation: [f32; 3],
+    pub iovr_override_summary: String,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct VerifiedHolo10dSpecimen {
     pub specimen_id: String,
@@ -105,6 +163,12 @@ pub struct VerifiedHolo10dSpecimen {
     pub nquin_subject_hash: u64,
     pub sealed_nquin_parity: u64,
     pub sha3_256_hex: String,
+    #[serde(default)]
+    pub container_profile: String,
+    #[serde(default)]
+    pub active_strata: Vec<MultiScaleStratumLayer>,
+    #[serde(default)]
+    pub constituent_leaves: Vec<ConstituentLeafRef>,
 }
 
 pub fn encode_holo_10d_container(spec: &VerifiedHolo10dSpecimen) -> Vec<u8> {
@@ -134,6 +198,9 @@ pub fn decode_holo_10d_container(
     specimen_id: &str,
     bytes: &[u8],
 ) -> Result<VerifiedHolo10dSpecimen, String> {
+    if bytes.starts_with(&ten::MAGIC_10D) {
+        return decode_canonical_qualiadb_10d_container(specimen_id, bytes);
+    }
     let specimen_id = specimen_slug(specimen_id)?;
     let bytes: &[u8; CONTAINER_BYTES] = bytes
         .try_into()
@@ -198,17 +265,16 @@ pub fn decode_holo_10d_container(
         u64::from(field_kind),
         u64::from(version),
     );
-    let title = DEFAULT_HOLO_SPECIMENS
+    let rehearsal = DEFAULT_HOLO_SPECIMENS
         .iter()
         .position(|&candidate| candidate == specimen_id)
-        .map_or_else(
-            || specimen_id.to_owned(),
-            |index| DEFAULT_TITLES[index].into(),
-        );
+        .filter(|&index| encode_holo_10d_container(&default_specimen(index)).as_slice() == bytes)
+        .map(compact_scene_rehearsal);
+    let (active_strata, constituent_leaves) = rehearsal.unwrap_or_default();
 
     Ok(VerifiedHolo10dSpecimen {
         specimen_id: specimen_id.into(),
-        title,
+        title: specimen_title(specimen_id),
         source_path: None,
         field_kind,
         version,
@@ -224,7 +290,478 @@ pub fn decode_holo_10d_container(
         nquin_subject_hash,
         sealed_nquin_parity: quin.parity(),
         sha3_256_hex,
+        container_profile: COMPACT_PROFILE.to_owned(),
+        active_strata,
+        constituent_leaves,
     })
+}
+
+pub fn decode_canonical_qualiadb_10d_container(
+    specimen_id: &str,
+    bytes: &[u8],
+) -> Result<VerifiedHolo10dSpecimen, String> {
+    let specimen_id = specimen_slug(specimen_id)?;
+    if bytes.len() > MAX_CANONICAL_BYTES {
+        return Err("The canonical .10d file exceeds the 16 MiB limit.".into());
+    }
+    let envelope = ten::Container10dHeader::parse(bytes).map_err(|error| error.to_string())?;
+    if envelope.version != ten::HEADER_VERSION
+        || envelope.header_crc32c != ten::compute_whole_file_crc32c(bytes)
+    {
+        return Err("The canonical .10d v2 version or whole-file checksum did not verify.".into());
+    }
+    let mut fields = [ten::TypedFieldRecord::default(); ten::MANIFOLD_IDENTITY_V2_MAX_FIELDS];
+    let mut scratch = fields;
+    let resolver = ten::TypedPayloadResolver::new(bytes, &[], &mut scratch, &mut fields)
+        .map_err(|error| error.to_string())?;
+    if !resolver.has_manifest() {
+        return Err("The canonical .10d file requires a MID2 manifest.".into());
+    }
+
+    let payload = one_field(&resolver, ten::FIELD_KIND_HOLOGRAPHIC_PHASE_SPACE)?
+        .ok_or("The MID2 manifest has no HOLO (0x0306) field.")?;
+    let records = record_slots(
+        payload,
+        ten::HOLOGRAPHIC_PHASE_HEADER_SIZE,
+        ten::EULERIAN_WAVEFIELD_RECORD_SIZE,
+        ten::MAX_HOLO_SEGMENTS + ten::MAX_EULERIAN_WAVEFIELDS,
+        "HOLO",
+    )?;
+    let mut segments = vec![M64HoloRecord::default(); records.min(ten::MAX_HOLO_SEGMENTS)];
+    let mut wavefields = vec![
+        ten::EulerianWavefieldRecord {
+            stream_velocity_m_s: [0.0; 3],
+            vorticity_curl_rad_s: 0.0,
+            bed_elevation_m: 0.0,
+            water_depth_m: 0.0,
+            fluid_density_kg_m3: 0.0,
+            drag_coefficient_cd: 0.0,
+            mode_amplitudes_f16: [0; 4],
+            mode_wavenumbers_f16: [0; 4],
+            mode_frequencies_f16: [0; 4],
+            mode_directions_q8: [0; 4],
+            record_crc32c: 0,
+        };
+        records.min(ten::MAX_EULERIAN_WAVEFIELDS)
+    ];
+    let (header, segment_count, wavefield_count) =
+        ten::decode_holographic_phase_section_into(payload, &mut segments, &mut wavefields)
+            .map_err(|error| format!("Could not verify canonical HOLO records: {error}"))?;
+    if header.max_harmonic_order > MAX_HARMONIC_ORDER
+        || !(1..=HOLO_MAX_RAYMARCH_STEPS).contains(&u32::from(header.max_raymarch_steps))
+        || !header
+            .proxy_aabb_min
+            .into_iter()
+            .zip(header.proxy_aabb_max)
+            .all(|(min, max)| min.is_finite() && max.is_finite() && min <= max)
+        || !header.sdf_smooth_union_radius.is_finite()
+        || header.sdf_smooth_union_radius < 0.0
+        || !(0.0..=1.0).contains(&header.reference_sigma)
+    {
+        return Err(
+            "The canonical HOLO bounds, blend parameters or projection limits are invalid.".into(),
+        );
+    }
+
+    let strata = read_strata(&resolver)?;
+    let constituent_leaves = read_constituent_leaves(&resolver, &strata)?;
+    let sha3_256_hex = format!("{:x}", Sha3_256::digest(bytes));
+    let quin = NQuin48::from_parts(
+        header.nquin_subject_hash,
+        q_hash_60("urn:webizen:specimen:verified-mid2-holo"),
+        q_hash_60(&sha3_256_hex),
+        u64::from(ten::FIELD_KIND_HOLOGRAPHIC_PHASE_SPACE),
+        u64::from(envelope.version),
+    );
+    Ok(VerifiedHolo10dSpecimen {
+        specimen_id: specimen_id.to_owned(),
+        title: specimen_title(specimen_id),
+        source_path: None,
+        field_kind: ten::FIELD_KIND_HOLOGRAPHIC_PHASE_SPACE,
+        version: envelope.version,
+        holo_segment_count: segment_count as u16,
+        wavefield_count: wavefield_count as u16,
+        max_harmonic_order: header.max_harmonic_order,
+        max_raymarch_steps: header.max_raymarch_steps,
+        proxy_aabb_min: header.proxy_aabb_min,
+        proxy_aabb_max: header.proxy_aabb_max,
+        sdf_smooth_union_radius: header.sdf_smooth_union_radius,
+        reference_sigma: header.reference_sigma,
+        default_shader_mode: HoloShaderVisualizationMode::PhaseSpaceWavefield,
+        nquin_subject_hash: header.nquin_subject_hash,
+        sealed_nquin_parity: quin.parity(),
+        sha3_256_hex,
+        container_profile: CANONICAL_PROFILE.to_owned(),
+        active_strata: strata.active,
+        constituent_leaves,
+    })
+}
+
+/// Encode admitted HOLO and other authored payloads through the canonical MID2 writer.
+/// On success only the returned prefix of the caller's output is part of the file.
+pub fn encode_canonical_qualiadb_10d_container(
+    identity: &ten::ManifoldIdentityV2,
+    fields: &[ten::TypedFieldRecord],
+    sections: &[ten::SectionInput<'_>],
+    out: &mut [u8],
+) -> Result<usize, String> {
+    if sections.len() >= ten::MAX_SECTION_COUNT as usize {
+        return Err("The .10d scene has too many section declarations.".into());
+    }
+    let manifest_len =
+        ten::manifold_identity_v2_encoded_len(fields.len()).map_err(|error| error.to_string())?;
+    let mut manifest = vec![0; manifest_len];
+    let mut section_scratch = sections.to_vec();
+    section_scratch.push(ten::SectionInput {
+        section_type: ten::SectionType::ManifoldIdentityV2,
+        alignment_tier: ten::AlignmentTier::Page,
+        stride: 0,
+        element_count: 0,
+        payload: &[],
+    });
+    let capacity = out.len().min(MAX_CANONICAL_BYTES);
+    let size = ten::encode_container_with_manifold_identity(
+        &ten::Container10dHeader::proposed(),
+        sections,
+        identity,
+        fields,
+        &mut manifest,
+        &mut section_scratch,
+        &mut out[..capacity],
+    )
+    .map_err(|error| format!("Could not encode the canonical MID2 scene: {error:?}"))?;
+    ten::seal_whole_file_crc32c(&mut out[..size]);
+    decode_canonical_qualiadb_10d_container("scene", &out[..size])?;
+    Ok(size)
+}
+
+fn one_field<'a>(
+    resolver: &ten::TypedPayloadResolver<'a, '_>,
+    kind: u16,
+) -> Result<Option<&'a [u8]>, String> {
+    let mut fields = resolver.payloads_of_kind(kind);
+    let first = fields
+        .next()
+        .transpose()
+        .map_err(|error| error.to_string())?;
+    if fields.next().is_some() {
+        return Err(format!("Ambiguous canonical .10d field 0x{kind:04x}."));
+    }
+    Ok(first.map(|field| field.bytes))
+}
+
+fn record_slots(
+    payload: &[u8],
+    header_size: usize,
+    record_size: usize,
+    max: usize,
+    label: &str,
+) -> Result<usize, String> {
+    payload
+        .len()
+        .checked_sub(header_size)
+        .filter(|length| length % record_size == 0)
+        .map(|length| length / record_size)
+        .filter(|&count| count <= max)
+        .ok_or_else(|| format!("The canonical {label} payload has an invalid extent."))
+}
+
+#[derive(Default)]
+struct SceneStrata {
+    active: Vec<MultiScaleStratumLayer>,
+    by_entity: BTreeMap<u64, Option<MultiScaleStratumLayer>>,
+    by_taxon: BTreeMap<u64, Option<MultiScaleStratumLayer>>,
+}
+
+fn empty_stratum_record() -> ten::NestedStratumNodeRecord {
+    ten::NestedStratumNodeRecord {
+        host_anchor: Default::default(),
+        parent_node_index: ten::STRATUM_NO_PARENT,
+        stratum_level: 0,
+        constituent_kind: ten::StratumConstituentKind::HolobiontOrSystemRoot as u8,
+        interaction_regime: ten::StratumInteractionRegime::StructuralConstituent as u8,
+        embodiment_state: ten::EmbodimentResolutionState::ComputationalOnly as u8,
+        quantum_basis_and_xc: 0,
+        characteristic_scale_log10_m_q12: 0,
+        taxon_or_ontology_iri_hash: 0,
+        target_archetype_or_qpu_nquin_hash: 0,
+        density_or_abundance_per_m3: 0.0,
+        metabolic_flux_or_hartree_energy: 0.0,
+        coupled_metric_a_f16: 0,
+        coupled_metric_b_f16: 0,
+        logic_invariants: Default::default(),
+        belnap_and_spin_u16: 0,
+        orbital_or_coupling_flags: 0,
+        record_crc32c: 0,
+    }
+}
+
+fn read_strata(resolver: &ten::TypedPayloadResolver<'_, '_>) -> Result<SceneStrata, String> {
+    let mut strata = SceneStrata::default();
+    let Some(payload) = one_field(resolver, ten::FIELD_KIND_MULTISCALE_STRATA)? else {
+        return Ok(strata);
+    };
+    let count = record_slots(
+        payload,
+        ten::MULTISCALE_STRATA_HEADER_SIZE,
+        ten::NESTED_STRATUM_NODE_SIZE,
+        ten::MAX_NESTED_STRATUM_NODES,
+        "MSTR",
+    )?;
+    let mut records = vec![empty_stratum_record(); count];
+    let (_, count) = ten::decode_multiscale_strata_section_into(payload, &mut records)
+        .map_err(|error| format!("Could not verify canonical MSTR records: {error:?}"))?;
+    let mut active = [false; 7];
+    for node in &records[..count] {
+        let index = usize::from(node.stratum_level);
+        let level = MultiScaleStratumLayer::ALL[index];
+        active[index] = true;
+        for (bindings, hash) in [
+            (&mut strata.by_entity, node.host_anchor.entity_hash),
+            (&mut strata.by_taxon, node.taxon_or_ontology_iri_hash),
+        ] {
+            if hash != 0 {
+                bindings
+                    .entry(hash)
+                    .and_modify(|known| {
+                        if *known != Some(level) {
+                            *known = None;
+                        }
+                    })
+                    .or_insert(Some(level));
+            }
+        }
+    }
+    strata.active = MultiScaleStratumLayer::ALL
+        .into_iter()
+        .zip(active)
+        .filter_map(|(level, present)| present.then_some(level))
+        .collect();
+    Ok(strata)
+}
+
+fn read_constituent_leaves(
+    resolver: &ten::TypedPayloadResolver<'_, '_>,
+    strata: &SceneStrata,
+) -> Result<Vec<ConstituentLeafRef>, String> {
+    let references = resolver
+        .payloads_of_kind(ten::FIELD_KIND_ARCHETYPE_REF)
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| error.to_string())?;
+    let has_overrides = resolver
+        .payloads_of_kind(ten::FIELD_KIND_INSTANCE_OVERRIDES)
+        .next()
+        .is_some();
+    if has_overrides {
+        resolver
+            .validate_instance_overrides()
+            .map_err(|error| error.to_string())?;
+    }
+    let mut instances = Vec::new();
+    let mut coordinates = None;
+    if let Some(payload) = one_field(resolver, ten::FIELD_KIND_INSTANCE_BATCH)? {
+        let count = record_slots(
+            payload,
+            ten::INSTANCE_BATCH_HEADER_SIZE,
+            ten::INSTANCE_BATCH_RECORD_SIZE,
+            ten::MAX_INSTANCE_BATCH_RECORDS,
+            "INST",
+        )?;
+        instances.resize(count, ten::InstanceBatchRecord::default());
+        ten::decode_instance_batch_into(payload, &mut instances)
+            .map_err(|error| format!("Could not verify canonical INST records: {error:?}"))?;
+        if let Some(nodes) = resolver.section_payload(ten::SectionType::Tensor10DNodes) {
+            if !nodes.as_ptr().cast::<ten::NodeMiniHeader>().is_aligned() {
+                return Err("The authored Tensor10D node section is not aligned.".into());
+            }
+            let (header, length) = ten::parse_node_header(nodes)
+                .map_err(|error| format!("Invalid INST node coordinates: {error:?}"))?;
+            if header.node_count as usize != instances.len() || length != nodes.len() {
+                return Err("The INST batch does not match the authored Tensor10D nodes.".into());
+            }
+            coordinates = Some(nodes);
+        }
+    }
+
+    let mut leaves = Vec::with_capacity(references.len());
+    let mut coefficients = [ten::SsmInstanceCoeff::default(); ten::MAX_INSTANCE_SSM_COEFFS];
+    for (slot, field) in references.iter().enumerate() {
+        let reference = ten::decode_archetype_ref_record(field.bytes)
+            .map_err(|error| format!("Could not verify canonical AREF slot {slot}: {error:?}"))?;
+        let algorithm = match ten::ArchetypeDigestAlg::from_u8(reference.digest_alg) {
+            Some(ten::ArchetypeDigestAlg::Sha256) => "sha256",
+            Some(ten::ArchetypeDigestAlg::Blake3_256) => "blake3",
+            None => return Err("The AREF digest algorithm is unavailable.".into()),
+        };
+        // A standalone envelope stores content digests and qualified identifiers.
+        // Bundle paths are resolved by the separate HMC admission boundary.
+        let digest: String = reference
+            .archetype_digest
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect();
+        let child_uri = format!("urn:webizen:10d:{algorithm}:{digest}");
+
+        let instance = (instances.len() == references.len()).then(|| &instances[slot]);
+        let stratum = instance
+            .and_then(|record| strata.by_entity.get(&record.entity_id_hash))
+            .or_else(|| strata.by_taxon.get(&reference.taxon_or_class_iri_hash))
+            .copied()
+            .flatten();
+        let bound = if has_overrides {
+            resolver
+                .instance_override_into(slot, &mut coefficients)
+                .map_err(|error| error.to_string())?
+        } else {
+            None
+        };
+        let mut details = match bound {
+            Some(override_data) => format!(
+                "IOVR: age {} d, scale {}, {} shape coefficients",
+                override_data.header.age_days,
+                override_data.header.uniform_scale,
+                override_data.coefficient_count
+            ),
+            None => String::from("No IOVR override"),
+        };
+        if instance.is_some() {
+            details.push_str(" · ordered INST binding");
+        } else if !instances.is_empty() {
+            details.push_str(&format!(
+                " · INST batch: {} instances; no per-slot binding",
+                instances.len()
+            ));
+        }
+        if stratum.is_none() {
+            details.push_str(" · no matching MSTR level; filed under L0");
+        }
+        let motor_translation = if let Some(override_data) = bound {
+            motor_translation(override_data.header.local_pga_motor)?
+        } else if let Some(nodes) = coordinates.filter(|_| instance.is_some()) {
+            let node = ten::read_node(nodes, slot)
+                .map_err(|error| format!("Could not read INST node coordinates: {error:?}"))?;
+            let translation = [node.x, node.y, node.z];
+            if !translation.into_iter().all(f32::is_finite) {
+                return Err("The INST translation contains a non-finite value.".into());
+            }
+            translation
+        } else {
+            details.push_str(" · no authored translation; origin placeholder");
+            [0.0; 3]
+        };
+        leaves.push(ConstituentLeafRef {
+            aref_slot: slot as u16,
+            child_uri,
+            stratum: stratum.unwrap_or(MultiScaleStratumLayer::L0Continuum),
+            motor_translation,
+            iovr_override_summary: details,
+        });
+    }
+    Ok(leaves)
+}
+
+fn motor_translation(components: [f32; 8]) -> Result<[f32; 3], String> {
+    let [s, e23, e31, e12, e01, e02, e03, e0123] = components.map(f64::from);
+    let motor = Motor {
+        r_w: s,
+        r_x: e23,
+        r_y: e31,
+        r_z: e12,
+        d_w: e0123,
+        d_x: -e01,
+        d_y: -e02,
+        d_z: -e03,
+    };
+    if !valid_motor(&motor) {
+        return Err("IOVR placement requires a unit PGA motor.".into());
+    }
+    let translation = motor.transform_point([0.0; 3]).map(|value| value as f32);
+    if translation.into_iter().all(f32::is_finite) {
+        Ok(translation)
+    } else {
+        Err("The IOVR translation exceeds finite workspace coordinates.".into())
+    }
+}
+
+fn specimen_title(specimen_id: &str) -> String {
+    DEFAULT_HOLO_SPECIMENS
+        .iter()
+        .position(|&candidate| candidate == specimen_id)
+        .map_or_else(
+            || specimen_id.to_owned(),
+            |index| DEFAULT_TITLES[index].to_owned(),
+        )
+}
+
+fn compact_scene_rehearsal(index: usize) -> (Vec<MultiScaleStratumLayer>, Vec<ConstituentLeafRef>) {
+    use MultiScaleStratumLayer::*;
+    let examples: &[(&str, MultiScaleStratumLayer, [f32; 3])] = match index {
+        0 => &[
+            ("landform", L0Continuum, [0.0, 0.0, 0.0]),
+            ("walkway", L1RigidArticulatedPgaXpbd, [0.25, 0.12, 0.0]),
+            ("catchment", L5EcologicalGeomorphic, [-0.3, -0.1, 0.15]),
+        ],
+        1 => &[
+            ("vessel-wall", L0Continuum, [0.0, 0.0, 0.0]),
+            ("cardiomyocyte", L4CellularBiological, [0.1, 0.25, 0.0]),
+        ],
+        2 => &[
+            ("riverbank", L5EcologicalGeomorphic, [-0.35, 0.1, 0.0]),
+            ("flow", L2SoftBodyFluid, [0.0, 0.0, 0.1]),
+        ],
+        _ => &[
+            ("mobius-surface", L0Continuum, [0.0, 0.0, 0.0]),
+            ("phase-feature", L6QuantumPhysics, [0.1, 0.0, 0.2]),
+        ],
+    };
+    let active = MultiScaleStratumLayer::ALL
+        .into_iter()
+        .filter(|level| examples.iter().any(|(_, stratum, _)| stratum == level))
+        .collect();
+    let leaves = examples
+        .iter()
+        .enumerate()
+        .map(|(slot, &(name, stratum, translation))| ConstituentLeafRef {
+            aref_slot: slot as u16,
+            child_uri: format!(
+                "urn:webizen:holo-rehearsal:{}:{name}",
+                DEFAULT_HOLO_SPECIMENS[index]
+            ),
+            stratum,
+            motor_translation: translation,
+            iovr_override_summary: "Local Rehearsal · illustrative AREF, IOVR and INST placement"
+                .into(),
+        })
+        .collect();
+    (active, leaves)
+}
+
+fn local_specimen_name(query: &str) -> Result<&str, String> {
+    let query = query.strip_prefix("holo:").unwrap_or(query);
+    if let Some(uri) = query
+        .strip_prefix("qualia://")
+        .or_else(|| query.strip_prefix("webizen://"))
+    {
+        let route = uri.split(['?', '#']).next().unwrap_or_default();
+        return match route {
+            "chora/universe" => Ok(DEFAULT_HOLO_SPECIMENS[0]),
+            _ => specimen_slug(
+                route
+                    .strip_prefix("specimens/")
+                    .ok_or("The native route has no registered shader-studio specimen.")?,
+            ),
+        };
+    }
+    Ok(query)
+}
+
+/// Verify the bytes of a known packaged rehearsal without consulting storage.
+pub(crate) fn default_holo_specimen(query: &str) -> Option<VerifiedHolo10dSpecimen> {
+    let id = specimen_slug(local_specimen_name(query.trim()).ok()?).ok()?;
+    let index = DEFAULT_HOLO_SPECIMENS
+        .iter()
+        .position(|&known| known == id)?;
+    decode_holo_10d_container(id, &encode_holo_10d_container(&default_specimen(index))).ok()
 }
 
 const DEFAULT_TITLES: [&str; 4] = [
@@ -261,6 +798,9 @@ fn default_specimen(index: usize) -> VerifiedHolo10dSpecimen {
         nquin_subject_hash: q_hash_60(id),
         sealed_nquin_parity: 0,
         sha3_256_hex: String::new(),
+        container_profile: COMPACT_PROFILE.to_owned(),
+        active_strata: Vec::new(),
+        constituent_leaves: Vec::new(),
     }
 }
 
@@ -281,23 +821,7 @@ pub fn resolve_holo_10d_specimen(
     if input.len() > 4096 || input.chars().any(char::is_control) {
         return Err("The specimen address is invalid.".into());
     }
-    let query = input.strip_prefix("holo:").unwrap_or(input);
-    let local_name = if let Some(uri) = query
-        .strip_prefix("qualia://")
-        .or_else(|| query.strip_prefix("webizen://"))
-    {
-        let route = uri.split(['?', '#']).next().unwrap_or_default();
-        match route {
-            "chora/universe" => DEFAULT_HOLO_SPECIMENS[0],
-            _ => specimen_slug(
-                route
-                    .strip_prefix("specimens/")
-                    .ok_or("The native route has no registered shader-studio specimen.")?,
-            )?,
-        }
-    } else {
-        query
-    };
+    let local_name = local_specimen_name(input)?;
     let path = Path::new(local_name);
     let is_path = path.is_absolute() || path.components().count() > 1;
     let file_name = if is_path {
@@ -392,14 +916,14 @@ fn read_specimen(slug: &str, file: &Path) -> Result<VerifiedHolo10dSpecimen, Str
     let metadata = fs::symlink_metadata(file).map_err(|error| error.to_string())?;
     if !metadata.is_file()
         || is_reparse_point(&metadata)
-        || metadata.len() != CONTAINER_BYTES as u64
+        || !(CONTAINER_BYTES as u64..=MAX_CANONICAL_BYTES as u64).contains(&metadata.len())
     {
-        return Err("The specimen needs a regular file using the Webizen .10d profile.".into());
+        return Err("The specimen needs a regular .10d file within the 16 MiB limit.".into());
     }
-    let mut bytes = Vec::with_capacity(CONTAINER_BYTES);
+    let mut bytes = Vec::with_capacity(metadata.len() as usize);
     File::open(file)
         .map_err(|error| error.to_string())?
-        .take((CONTAINER_BYTES + 1) as u64)
+        .take((MAX_CANONICAL_BYTES + 1) as u64)
         .read_to_end(&mut bytes)
         .map_err(|error| error.to_string())?;
     let mut spec = decode_holo_10d_container(slug, &bytes)?;
@@ -512,6 +1036,147 @@ mod tests {
         fs::write(&foreign, encode_holo_10d_container(&default_specimen(0))).unwrap();
         assert!(resolve_holo_10d_specimen(&storage, foreign.to_str().unwrap()).is_err());
         fs::remove_dir_all(storage).unwrap();
+    }
+
+    #[test]
+    fn decodes_canonical_qualiadb_mid2_10d_containers_and_preserves_l0_l6_strata() {
+        let header = ten::HolographicPhaseHeader {
+            magic: ten::HOLOGRAPHIC_PHASE_TAG,
+            version: ten::HOLOGRAPHIC_PHASE_VERSION,
+            flags: 0,
+            holo_segment_count: 1,
+            wavefield_count: 0,
+            max_harmonic_order: 4,
+            max_raymarch_steps: 32,
+            primary_constituent_lut_idx: 0,
+            proxy_lens_kind: 0,
+            proxy_aabb_min: [-1.0, -2.0, -3.0],
+            proxy_aabb_max: [1.0, 2.0, 3.0],
+            sdf_smooth_union_radius: 0.1,
+            reference_sigma: 0.5,
+            nquin_subject_hash: 42,
+            payload_crc32c: 0,
+            header_crc32c: 0,
+        };
+        let mut holo = [0; 128];
+        ten::encode_holographic_phase_section(header, &[M64HoloRecord::default()], &[], &mut holo)
+            .unwrap();
+
+        let mut strata = [empty_stratum_record(); 7];
+        for (level, node) in strata.iter_mut().enumerate() {
+            node.stratum_level = level as u8;
+            node.host_anchor.entity_hash = 800 + level as u64;
+            node.taxon_or_ontology_iri_hash = 900 + level as u64;
+        }
+        let mut mstr = vec![0; ten::multiscale_strata_encoded_len(strata.len()).unwrap()];
+        ten::encode_multiscale_strata_section(&strata, 77, &mut mstr).unwrap();
+
+        let reference = ten::ArchetypeRefRecord::new(
+            ten::ArchetypeDigestAlg::Sha256,
+            ten::ArchetypeTargetKind::Archetype10D,
+            ten::OVERRIDE_FLAG_COORDS_10D,
+            [0xab; 32],
+            [0x21; 16],
+            904,
+            432,
+        );
+        let mut aref = [0; ten::ARCHETYPE_REF_RECORD_SIZE];
+        ten::encode_archetype_ref_record(&reference, &mut aref).unwrap();
+        let mut iovr = [0; ten::INSTANCE_OVERRIDE_HEADER_SIZE];
+        ten::encode_instance_overrides(
+            12.0,
+            1.25,
+            [1.0, 0.0, 0.0, 0.0, -0.5, -1.0, -1.5, 0.0],
+            &[],
+            &mut iovr,
+        )
+        .unwrap();
+
+        let mut inst = [0; ten::INSTANCE_BATCH_HEADER_SIZE + ten::INSTANCE_BATCH_RECORD_SIZE];
+        ten::encode_instance_batch(
+            &[ten::InstanceBatchRecord {
+                entity_id_hash: 804,
+                ..Default::default()
+            }],
+            &mut inst,
+        )
+        .unwrap();
+
+        let mut payload = Vec::new();
+        let mut fields = Vec::new();
+        for (kind, bytes) in [
+            (ten::FIELD_KIND_HOLOGRAPHIC_PHASE_SPACE, holo.as_slice()),
+            (ten::FIELD_KIND_MULTISCALE_STRATA, mstr.as_slice()),
+            (ten::FIELD_KIND_ARCHETYPE_REF, aref.as_slice()),
+            (ten::FIELD_KIND_INSTANCE_OVERRIDES, iovr.as_slice()),
+            (ten::FIELD_KIND_INSTANCE_BATCH, inst.as_slice()),
+        ] {
+            fields.push(ten::TypedFieldRecord {
+                field_id: fields.len() as u64 + 1,
+                kind,
+                payload_section_id: ten::SectionType::FieldSidecar as u32,
+                payload_offset: payload.len() as u64,
+                payload_length: bytes.len() as u64,
+                ..Default::default()
+            });
+            payload.extend_from_slice(bytes);
+        }
+        let sections = [ten::SectionInput {
+            section_type: ten::SectionType::FieldSidecar,
+            alignment_tier: ten::AlignmentTier::Page,
+            stride: 0,
+            element_count: 0,
+            payload: &payload,
+        }];
+        let identity = ten::ManifoldIdentityV2 {
+            entity_id: ten::StableEntityId([0x42; 16]),
+            profile_id: 1,
+            domain_id: 1,
+            coordinate_convention_id: 1,
+            coordinates: [0.0; 10],
+            external_digest: None,
+        };
+        let mut bytes = vec![0; 32 * 1024];
+        let written =
+            encode_canonical_qualiadb_10d_container(&identity, &fields, &sections, &mut bytes)
+                .unwrap();
+        bytes.truncate(written);
+        let scene = decode_holo_10d_container("mid2-sample", &bytes).unwrap();
+        assert_eq!(scene.container_profile, CANONICAL_PROFILE);
+        assert_eq!(scene.active_strata, MultiScaleStratumLayer::ALL);
+        assert_eq!(scene.proxy_aabb_max, [1.0, 2.0, 3.0]);
+        assert_eq!(scene.holo_segment_count, 1);
+        assert_eq!(scene.max_raymarch_steps, 32);
+        assert_eq!(scene.constituent_leaves.len(), 1);
+        let leaf = &scene.constituent_leaves[0];
+        assert_eq!(leaf.aref_slot, 0);
+        assert_eq!(
+            leaf.child_uri,
+            format!("urn:webizen:10d:sha256:{}", "ab".repeat(32))
+        );
+        assert_eq!(leaf.stratum, MultiScaleStratumLayer::L4CellularBiological);
+        assert_eq!(leaf.motor_translation, [1.0, 2.0, 3.0]);
+        assert!(leaf.iovr_override_summary.contains("ordered INST binding"));
+
+        let storage = std::env::temp_dir().join(format!(
+            "webizen-mid2-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let specimen_directory = specimen_directory(&storage, true).unwrap();
+        fs::write(specimen_directory.join("mid2-sample.10d"), &bytes).unwrap();
+        let on_disk =
+            resolve_holo_10d_specimen(&storage, "qualia://specimens/mid2-sample").unwrap();
+        assert_eq!(on_disk.sha3_256_hex, scene.sha3_256_hex);
+        assert_eq!(on_disk.constituent_leaves, scene.constituent_leaves);
+        fs::remove_dir_all(storage).unwrap();
+
+        let end = bytes.len() - 1;
+        bytes[end] ^= 1;
+        assert!(decode_holo_10d_container("mid2-sample", &bytes).is_err());
     }
 
     #[test]

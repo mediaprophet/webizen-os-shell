@@ -3,9 +3,13 @@
 
 use super::poet_synth::resource_clipboard_notice;
 use crate::components::viewports::Holo10dViewport;
-use crate::state::ShellState;
+use crate::state::{session, ShellState};
 use aether::prelude::*;
-use webizen_ua_os::{recommend_toolboxes_for_entry, SemanticSection, SemanticToolboxId};
+use webizen_ua_os::{
+    export_semantic_entry_to_solid_turtle, import_solid_turtle_to_semantic_fs, may_export_entry,
+    recommend_toolboxes_for_entry, seal_and_inspect_qecp_envelope, SemanticAssetEntry,
+    SemanticSection, SemanticToolboxId,
+};
 
 #[component]
 pub fn LibraryVolume(mut state: Signal<ShellState>) -> Element {
@@ -27,6 +31,7 @@ pub fn LibraryVolume(mut state: Signal<ShellState>) -> Element {
         .find(|e| e.asset_uri == selected_uri)
         .cloned()
         .or_else(|| matched.first().cloned());
+    let portability_entry = selected_entry.clone();
 
     let store_path = s.semantic_fs.store_path.display().to_string();
     let total_entries = s.semantic_fs.entries.len();
@@ -221,6 +226,7 @@ pub fn LibraryVolume(mut state: Signal<ShellState>) -> Element {
                     specimen_label: viewport_label,
                     specimen_id: viewport_specimen_id,
                 }
+                LibraryPortabilityPanel { state, selected: portability_entry }
 
                 button {
                     r#type: "button",
@@ -650,6 +656,159 @@ pub fn LibraryVolume(mut state: Signal<ShellState>) -> Element {
                     }
                     if !clipboard_toast.is_empty() {
                         p { class: "muted", role: "status", "{clipboard_toast}" }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[component]
+fn LibraryPortabilityPanel(
+    mut state: Signal<ShellState>,
+    selected: Option<SemanticAssetEntry>,
+) -> Element {
+    let mut endpoint = use_signal(String::new);
+    let mut turtle = use_signal(String::new);
+    let mut claimed_issuer = use_signal(String::new);
+    let mut claim = use_signal(String::new);
+    let mut status = use_signal(String::new);
+    let export_allowed = selected.as_ref().is_some_and(may_export_entry);
+    let certificate_title = selected.as_ref().map(|entry| entry.title.clone());
+    let title_label = certificate_title
+        .clone()
+        .unwrap_or_else(|| "Select a Library resource".into());
+    let can_seal = certificate_title.is_some();
+    let last_solid = state.read().last_solid_receipt.clone();
+    let last_qecp = state.read().last_qecp_envelope.clone();
+
+    rsx! {
+        section {
+            class: "id-list",
+            h4 { "QECP Credential & Solid Turtle Bridge" }
+            p { "Selected resource · {title_label}" }
+            label {
+                "HTTPS Pod address (optional, offline metadata)"
+                input {
+                    class: "input-field",
+                    value: "{endpoint}",
+                    oninput: move |event| endpoint.set(event.value()),
+                }
+            }
+            button {
+                r#type: "button",
+                class: "sanctum-issue",
+                disabled: !export_allowed,
+                onclick: move |_| {
+                    let result = session()
+                        .zip(selected.as_ref())
+                        .ok_or_else(|| "Select a resource in an active local session.".to_string())
+                        .and_then(|(device, entry)| {
+                            export_semantic_entry_to_solid_turtle(&device.host.storage, entry, endpoint().trim())
+                        });
+                    match result {
+                        Ok(receipt) => {
+                            turtle.set(receipt.turtle_document.clone());
+                            state.write().last_solid_receipt = Some(receipt);
+                            status.set("Wrote a local Turtle export for the public resource.".into());
+                        }
+                        Err(error) => status.set(error),
+                    }
+                },
+                "Export selected resource to Turtle"
+            }
+            if !export_allowed {
+                p { class: "muted", "Export requires explicit public Permissive Commons disclosure." }
+            }
+            label {
+                "Turtle source"
+                textarea {
+                    class: "input-field",
+                    rows: "5",
+                    value: "{turtle}",
+                    oninput: move |event| turtle.set(event.value()),
+                }
+            }
+            button {
+                r#type: "button",
+                class: "sanctum-issue",
+                disabled: turtle().trim().is_empty(),
+                onclick: move |_| {
+                    if session().is_none() {
+                        status.set("Open a local session to import RDF metadata.".into());
+                        return;
+                    }
+                    let mut shell = state.write();
+                    match import_solid_turtle_to_semantic_fs(&mut shell.semantic_fs, &turtle(), endpoint().trim()) {
+                        Ok(receipt) => {
+                            shell.last_solid_receipt = Some(receipt);
+                            status.set("Imported RDF metadata as a private Library record.".into());
+                        }
+                        Err(error) => status.set(error),
+                    }
+                },
+                "Import Turtle locally"
+            }
+            label {
+                "Claimed pairwise issuer DID"
+                input {
+                    class: "input-field",
+                    value: "{claimed_issuer}",
+                    oninput: move |event| claimed_issuer.set(event.value()),
+                }
+            }
+            label {
+                "Credential claim"
+                input {
+                    class: "input-field",
+                    value: "{claim}",
+                    oninput: move |event| claim.set(event.value()),
+                }
+            }
+            button {
+                r#type: "button",
+                class: "sanctum-issue",
+                disabled: !can_seal || claimed_issuer().trim().is_empty() || claim().trim().is_empty(),
+                onclick: move |_| {
+                    let result = session()
+                        .zip(certificate_title.as_deref())
+                        .ok_or_else(|| "Select a resource in an active local session.".to_string())
+                        .and_then(|(device, title)| {
+                            seal_and_inspect_qecp_envelope(
+                                &device.host.storage,
+                                title,
+                                claimed_issuer().trim(),
+                                claim().trim(),
+                            )
+                        });
+                    match result {
+                        Ok(envelope) => {
+                            state.write().last_qecp_envelope = Some(envelope);
+                            status.set("Saved an unsigned QECP companion for external review.".into());
+                        }
+                        Err(error) => status.set(error),
+                    }
+                },
+                "Seal & inspect local QECP companion"
+            }
+            p { role: "status", "{status}" }
+            if let Some(receipt) = last_solid {
+                {
+                    let parity = format!("{:016x}", receipt.sealed_nquin_parity);
+                    let path = receipt.file_path.map(|path| path.display().to_string()).unwrap_or_default();
+                    rsx! {
+                        p { "{receipt.direction} · {receipt.triple_count} triples · NQuin48 parity {parity}" }
+                        if !path.is_empty() { p { "{path}" } }
+                    }
+                }
+            }
+            if let Some(envelope) = last_qecp {
+                {
+                    let parity = format!("{:016x}", envelope.sealed_nquin_parity);
+                    rsx! {
+                        p { "{envelope.c2pa_jumbf_label} · NQuin48 parity {parity}" }
+                        p { "{envelope.credential_id} · {envelope.signature_scheme}" }
+                        p { "{envelope.origin_integrity_disclaimer}" }
                     }
                 }
             }

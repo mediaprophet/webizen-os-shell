@@ -35,20 +35,27 @@ pub mod mesh_simulator;
 pub mod mobile_avf;
 mod native_gpu;
 mod os_env;
+pub mod os_job_runner;
+pub mod os_jobs_leases;
+mod os_qcdn_mirror;
 mod poet_synth;
+pub mod portability_qecp;
 mod qap_host;
+pub mod qualia_host_foundation;
 pub mod sanctuary_onboarding;
 mod semantic_fs;
 mod session;
 mod updater;
+pub mod workspace_persistence;
 
 pub use browser_app::{
-    evaluate_hybrid_page_request, inspect_browser_product, resolve_mode_for_uri,
-    upgrade_browser_product_independent, BrowserExecutionMode, BrowserProductStatus,
-    BrowserSocialGraph, HybridBridgeReceipt, HybridCapabilityChannelSpec,
-    HybridWebCapabilityChannel, SemanticBookmark, SemanticSocialGroup, SemanticWebAnnotation,
-    SocialDisclosureScope, BROWSER_APP_DID, BROWSER_GIT_DID, BROWSER_QAP_ID,
-    BROWSER_SOCIAL_STORE_REL_PATH, MAX_GOVERNED_VIBESCRIPT_CELL_BYTES,
+    evaluate_hybrid_page_request, evaluate_hybrid_page_request_in_storage, hybrid_https_origin,
+    inspect_browser_product, resolve_mode_for_uri, upgrade_browser_product_independent,
+    BrowserExecutionMode, BrowserProductStatus, BrowserSocialGraph, ChoraWorkerSupervisorSnapshot,
+    HybridBridgeReceipt, HybridCapabilityChannelSpec, HybridWebCapabilityChannel, SemanticBookmark,
+    SemanticSocialGroup, SemanticWebAnnotation, SocialDisclosureScope, BROWSER_APP_DID,
+    BROWSER_GIT_DID, BROWSER_QAP_ID, BROWSER_SOCIAL_STORE_REL_PATH,
+    MAX_GOVERNED_VIBESCRIPT_CELL_BYTES,
 };
 pub use daemon::{
     ensure_daemon, http_invoke, ping_daemon, probe_only, DaemonError, DaemonHandle, DaemonStatus,
@@ -64,10 +71,12 @@ pub use desktop_appliance::{
     TrayMenuBindingSpec,
 };
 pub use holo_10d_specimen::{
-    decode_holo_10d_container, encode_holo_10d_container, proxy_corners_for_specimen,
-    resolve_holo_10d_specimen, seed_default_holo_10d_specimens, HoloShaderVisualizationMode,
-    VerifiedHolo10dSpecimen, DEFAULT_HOLO_SPECIMENS, FIELD_KIND_HOLO_PHASE_SPACE,
-    HOLO_HEADER_BYTES, HOLO_MAX_RAYMARCH_STEPS,
+    decode_canonical_qualiadb_10d_container, decode_holo_10d_container,
+    encode_canonical_qualiadb_10d_container, encode_holo_10d_container, proxy_corners_for_specimen,
+    resolve_holo_10d_specimen, seed_default_holo_10d_specimens, ConstituentLeafRef,
+    HoloShaderVisualizationMode, MultiScaleStratumLayer, VerifiedHolo10dSpecimen,
+    DEFAULT_HOLO_SPECIMENS, FIELD_KIND_HOLO_PHASE_SPACE, HOLO_HEADER_BYTES,
+    HOLO_MAX_RAYMARCH_STEPS,
 };
 pub use host_daemon_runtime::{
     execute_hostd_command, handle_peer_p64_mcp_json_rpc_line, parse_hostd_args, run_daemon_tick,
@@ -120,6 +129,11 @@ pub use native_gpu::{
     NODE_PROFILE_FILE_NAME,
 };
 pub use os_env::OsEnvironment;
+pub use os_job_runner::{OsJobInput, OsJobRunner};
+pub use os_jobs_leases::{
+    CapabilityLeaseScope, OsControlCenterState, OsJobKind, OsJobRecord, OsJobStatus,
+    OsNotificationSeverity, OsSystemNotification, QapCapabilityLease, OS_CONTROL_CENTER_REL_PATH,
+};
 pub use poet_synth::{
     core_semantic_instruments_catalog, discover_unified_llm_vault, hypermedia_pillar_catalog,
     list_native_vibe_providers, poet_analyze_and_seal_gazetteer, poet_eval_native_cell,
@@ -130,13 +144,26 @@ pub use poet_synth::{
     PoetGazetteerResult, SemanticInstrumentSummary, ShaclExtensionFamilySummary,
     HYPERMEDIA_MORPHISM_COUNT,
 };
+pub use portability_qecp::{
+    export_semantic_entry_to_solid_turtle, export_shamir_q42j_backup,
+    import_solid_turtle_to_semantic_fs, load_shamir_q42j_backup, may_export_entry,
+    seal_and_inspect_qecp_envelope, verify_and_restore_shamir_q42j_backup, QecpCredentialEnvelope,
+    ShamirQ42jBackupArchive, SolidTurtleSyncReceipt,
+};
 pub use qap_host::{
-    build_lease_sheet, install_from_source, install_package_atomic, load_install_registry,
-    plan_qapp_launch, revoke_package, save_install_registry, seed_bundled_qaps,
+    authorize_qap_graph_read, authorize_qap_vibe_source, build_lease_sheet, install_from_source,
+    install_package_atomic, load_install_registry, plan_qapp_launch, qap_lease_status,
+    require_qap_capability, revoke_package, save_install_registry, seed_bundled_qaps,
     synthesize_qapp_json_from_yaml, unpack_qpkg_zip, validate_package_id, InstallPolicy,
-    InstallSource, LaunchKind, LaunchPlan, LeaseFamily, LeaseSheet, QappHostExtension,
-    QappInstallError, QappInstallRegistry, QappLaunchRequirement, QappPackageManifest,
-    QappRegistryEntry, TrustRoots, UaOsHost, BUNDLED_FIRST_PARTY_QAPS, FIRST_PARTY_PUBKEY,
+    InstallSource, LaunchKind, LaunchPlan, LeaseFamily, LeaseSheet, QapLeaseStatus,
+    QappHostExtension, QappInstallError, QappInstallRegistry, QappLaunchRequirement,
+    QappPackageManifest, QappRegistryEntry, TrustRoots, UaOsHost, BUNDLED_FIRST_PARTY_QAPS,
+    FIRST_PARTY_PUBKEY,
+};
+pub use qualia_host_foundation::{
+    record_authoring_source_review, run_governed_vibe_source, AdoptedQualiaFoundation,
+    AuthoringWorkflowSnapshot, GovernedVibeActionReport, QapPoetGraphHost,
+    VibeExecutionReceiptSummary,
 };
 pub use sanctuary_onboarding::{
     build_sanctuary_onboarding_state, pair_and_test_pocket_cosigner,
@@ -158,6 +185,11 @@ pub use updater::{
     vendor_update_signing_payload, verify_detached_ed25519, verify_quorum_update_manifest,
     DualSkuPackagingReceipt, QuorumApproval, QuorumUpdateProof, UpdateAction, UpdateManifest,
     UpdateReceipt, FIRST_PARTY_UPDATER_PUBKEY_HEX,
+};
+
+pub use workspace_persistence::{
+    load_workspace_snapshot, save_workspace_snapshot, PersistedWorkspaceSnapshot,
+    ShellRendererHealthSummary,
 };
 
 pub const DEFAULT_DAEMON_PORT: u16 = 4242;

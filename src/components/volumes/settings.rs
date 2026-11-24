@@ -6,12 +6,16 @@ use super::{
     llm_agents::LlmAndAgentManagementPanel,
 };
 use crate::state::{session, SettingsSection, ShellState, ALL_SETTINGS_SECTIONS};
-use aether::prelude::*;
+use aether::{aether_core::try_consume_context, prelude::*};
 use webizen_ua_os::{
-    generate_dual_sku_delivery_artifacts, issue_for_requestor, run_local_model_readiness_probe,
-    run_updater, Ask, Requestor, UpdateAction, CO_ATTESTATION_BUNDLE_FORMULA, DID_Q42_QRC_LABEL,
-    PLANE_CLAIM_OPINION_TITLE, PLANE_INSTRUMENT_TITLE, PLANE_NATURAL_AGENT_TITLE,
-    PLANE_SPATIOTEMPORAL_HANDLE_TITLE, VC_ORIGIN_INTEGRITY_DISCLAIMER,
+    export_semantic_entry_to_solid_turtle, export_shamir_q42j_backup,
+    generate_dual_sku_delivery_artifacts, issue_for_requestor, load_shamir_q42j_backup,
+    qap_lease_status, run_local_model_readiness_probe, run_updater, save_workspace_snapshot,
+    verify_and_restore_shamir_q42j_backup, AdoptedQualiaFoundation, Ask, CapabilityLeaseScope,
+    CommonsShareScope, OsJobInput, OsJobKind, OsJobRunner, OsJobStatus, QapLeaseStatus, Requestor,
+    UpdateAction, CO_ATTESTATION_BUNDLE_FORMULA, DID_Q42_QRC_LABEL, PLANE_CLAIM_OPINION_TITLE,
+    PLANE_INSTRUMENT_TITLE, PLANE_NATURAL_AGENT_TITLE, PLANE_SPATIOTEMPORAL_HANDLE_TITLE,
+    VC_ORIGIN_INTEGRITY_DISCLAIMER,
 };
 
 /// Canonical settings and environment setup shell.
@@ -140,12 +144,13 @@ fn SettingsSectionBody(section: SettingsSection, mut state: Signal<ShellState>) 
                     div {
                         class: "plane-grid",
                         div { class: "plane-card", h5 { "Data Home [Ready]" } p { "{storage} · Unified .q42 v3/v4 + .10d v2 HOLO + VaultContainerV2" } }
-                        div { class: "plane-card", h5 { "Native Etalon GPU [Ready]" } p { "{gpu} · TargetProfileMask::NATIVE_DESKTOP · 11 providers" } }
+                        div { class: "plane-card", h5 { "Native Etalon GPU" } p { "{gpu} · TargetProfileMask::NATIVE_DESKTOP · 11 providers" } }
                         div { class: "plane-card", h5 { "Webizen Sentinel [Ready]" } p { "42 MiB Zero-Heap SlgArena · 917,504 48-byte NQuin48 slots" } }
                         div { class: "plane-card", h5 { "Four-Plane Fabric [Ready]" } p { "{validation}" } }
                         div { class: "plane-card", h5 { "Local AI Instrument" } p { "{model_status}" } }
                         div { class: "plane-card", h5 { "QualiaDB Sidecar (:4242)" } p { "{daemon}" } }
                     }
+                    RendererHealthPanel { state }
                 }
             }
         }
@@ -263,6 +268,7 @@ fn SettingsSectionBody(section: SettingsSection, mut state: Signal<ShellState>) 
                         li { "W3C Solid / LDP Off-Ramp (web.civics.au / Solid-CSS-Databox): Bidirectional Turtle/RDF <-> 48-byte NQuin bridge" }
                     }
                 }
+                SettingsSolidExport { state }
             }
         },
         SettingsSection::Privacy => rsx! {
@@ -364,6 +370,7 @@ fn SettingsSectionBody(section: SettingsSection, mut state: Signal<ShellState>) 
                         }
                     }
                     p { class: "muted", "Active Theme Preset: {theme_preset} · {motion_label}" }
+                    WorkspaceSave { state }
                 }
             }
         }
@@ -414,7 +421,7 @@ fn SettingsSectionBody(section: SettingsSection, mut state: Signal<ShellState>) 
                 header {
                     class: "settings-head",
                     h3 { "8. Backup & Recovery · Shamir .q42j Journals, .qnf Evidence & Solid Portability" }
-                    p { "Client-encrypted backups and standards-compliant W3C Solid off-ramp ensure you are never locked into a single device or binary runtime." }
+                    p { "Recover encrypted public metadata and export eligible Library records as local Turtle files." }
                 }
                 section {
                     class: "id-list",
@@ -423,9 +430,11 @@ fn SettingsSectionBody(section: SettingsSection, mut state: Signal<ShellState>) 
                         li { ".q42j Client-Encrypted Journals: Shamir secret-shared backups & Two-Loop Permissive Commons value-flow logs" }
                         li { ".qnf (QNFNET01): Immutable network evidence containers with post-quantum ML-DSA/SLH-DSA proofs" }
                         li { "Person Transfer Bundle (qualia.person.transfer.v1): Re-bind principal stewardship across your apparatus fleet" }
-                        li { "W3C Solid / LDP Databox Export (web.civics.au): Lossless 48-byte NQuin <-> RDF Turtle translation boundary" }
+                        li { "W3C Solid / LDP Databox export: portable RDF Turtle for supported Library metadata" }
                     }
                 }
+                BackupRecoveryPanel { state }
+                SettingsSolidExport { state }
             }
         },
         SettingsSection::Services => rsx! {
@@ -444,6 +453,8 @@ fn SettingsSectionBody(section: SettingsSection, mut state: Signal<ShellState>) 
                     dt { "Host Link" }
                     dd { "{host_link}" }
                 }
+                OsJobQueue { state }
+                QapLeaseMatrix { state }
                 HostDaemonPanel { state }
                 if !host_activity.is_empty() {
                     p { class: "path", role: "status", "{host_activity}" }
@@ -513,6 +524,7 @@ fn SettingsSectionBody(section: SettingsSection, mut state: Signal<ShellState>) 
                     h3 { "10. All Technical Settings · Native Etalon Adapters & VibeScript ABI" }
                     p { "Low-level physical GPU adapter diagnostics, Anvil NodeProfile64 specialization hints, and 11 native vibescript-abi extension providers." }
                 }
+                RendererHealthPanel { state }
                 section {
                     class: "id-list",
                     h4 { "Physical Etalon Native GPU Adapters ({adapter_lines.len()})" }
@@ -524,5 +536,666 @@ fn SettingsSectionBody(section: SettingsSection, mut state: Signal<ShellState>) 
                 }
             }
         },
+    }
+}
+
+#[component]
+pub(crate) fn WorkspaceSave(state: Signal<ShellState>) -> Element {
+    let mut status = use_signal(String::new);
+    rsx! {
+        div {
+            class: "workspace-save",
+            button {
+                r#type: "button",
+                class: "sanctum-issue",
+                onclick: move |_| {
+                    let Some(sess) = session() else {
+                        status.set("Open a local session to save a workspace.".into());
+                        return;
+                    };
+                    let snapshot = state.peek().to_workspace_snapshot();
+                    status.set(match save_workspace_snapshot(&sess.host.storage, &snapshot) {
+                        Ok(path) => format!("Workspace saved to {}", path.display()),
+                        Err(error) => format!("Workspace save failed: {error}"),
+                    });
+                },
+                "Save Workspace Snapshot (shell_workspace.json)"
+            }
+            p { class: "path", role: "status", "{status}" }
+        }
+    }
+}
+
+#[component]
+fn RendererHealthPanel(state: Signal<ShellState>) -> Element {
+    let health = state.read().renderer_health.clone();
+    let (width, height) = health.viewport_dimensions;
+    rsx! {
+        section {
+            class: "id-list",
+            h4 { "Native Renderer Health" }
+            dl {
+                class: "kv renderer-health",
+                dt { "Backend" }
+                dd { "{health.backend_label}" }
+                dt { "Fallback policy" }
+                dd { "{health.fallback_policy_label}" }
+                dt { "Fallback engaged" }
+                dd { if health.fallback_engaged { "Yes" } else { "No" } }
+                dt { "HOLO surface" }
+                dd { "{health.active_holo_surface_status}" }
+                dt { "Viewport" }
+                dd { "{width} × {height} px" }
+            }
+        }
+    }
+}
+
+pub(crate) fn control_center_storage(
+    state: Signal<ShellState>,
+) -> Result<&'static std::path::Path, String> {
+    if let Some(error) = state.peek().os_control_center_error.as_ref() {
+        return Err(format!("Control Center is read-only: {error}"));
+    }
+    session()
+        .map(|sess| sess.host.storage.as_path())
+        .ok_or_else(|| "Open a local session to update the Control Center.".into())
+}
+
+#[component]
+fn OsJobQueue(mut state: Signal<ShellState>) -> Element {
+    let runner = try_consume_context::<OsJobRunner>();
+    let foundation = try_consume_context::<AdoptedQualiaFoundation>();
+    let shell = state.read();
+    let jobs = shell.os_control_center.jobs.clone();
+    let load_error = shell.os_control_center_error.clone();
+    let runner_error = shell.os_job_runner_error.clone();
+    let gguf_source = shell
+        .staged_gguf_source
+        .as_ref()
+        .map(|(path, _)| path.clone());
+    let can_edit = load_error.is_none() && session().is_some();
+    let can_run = can_edit && runner.is_some() && runner_error.is_none();
+    drop(shell);
+
+    let mut selected_kind = use_signal(|| OsJobKind::TriTargetDebianBuild);
+    let mut vibe_source = use_signal(String::new);
+    let mut qcdn_project = use_signal(String::new);
+    let mut status = use_signal(String::new);
+    let kind = selected_kind();
+    let show_vibe_source = kind == OsJobKind::GovernedVibeScriptBatch
+        || jobs
+            .iter()
+            .any(|job| job.kind == OsJobKind::GovernedVibeScriptBatch && job.status.can_start());
+    let show_qcdn_project = kind == OsJobKind::QcdnSwarmMerkleSync
+        || jobs
+            .iter()
+            .any(|job| job.kind == OsJobKind::QcdnSwarmMerkleSync && job.status.can_start());
+    let show_gguf_source = kind == OsJobKind::GgufToP64Conversion
+        || jobs
+            .iter()
+            .any(|job| job.kind == OsJobKind::GgufToP64Conversion && job.status.can_start());
+    let has_vibe_admission = foundation
+        .as_ref()
+        .is_some_and(|scope| scope.graph_grant().is_some());
+    let has_vibe_source = !vibe_source.read().trim().is_empty();
+    let has_qcdn_project = !qcdn_project.read().trim().is_empty();
+    let staged_gguf = gguf_source
+        .as_ref()
+        .and_then(|path| path.file_name())
+        .map(|name| name.to_string_lossy().into_owned());
+
+    rsx! {
+        section {
+            class: "id-list os-job-queue",
+            h4 { "OS Job Queue" }
+            if let Some(error) = load_error {
+                p { class: "path", role: "status", "Control Center is read-only. {error}" }
+            } else if let Some(error) = runner_error {
+                p { class: "path", role: "status", "Background runner unavailable. {error}" }
+            }
+            p { class: "muted", "Queued jobs start when you select Run. You can leave Settings while a job runs." }
+            div {
+                class: "input-row",
+                label {
+                    "Job type "
+                    select {
+                        value: "{kind.code()}",
+                        onchange: move |event| {
+                            let code = event.value();
+                            if let Some(kind) = OsJobKind::ALL.into_iter().find(|kind| kind.code() == code) {
+                                selected_kind.set(kind);
+                                status.set(String::new());
+                            }
+                        },
+                        for kind in OsJobKind::ALL {
+                            option { key: "{kind.code()}", value: "{kind.code()}", "{kind.label()}" }
+                        }
+                    }
+                }
+                button {
+                    r#type: "button",
+                    disabled: !can_edit,
+                    onclick: move |_| {
+                        let kind = selected_kind();
+                        let result = control_center_storage(state).and_then(|storage| {
+                            state.write().os_control_center.enqueue_os_job(
+                                storage, kind, kind.label(), kind.default_volume_slug(),
+                            )
+                        });
+                        status.set(match result {
+                            Ok(job) => format!("{} queued.", job.title),
+                            Err(error) => error,
+                        });
+                    },
+                    "Queue job"
+                }
+            }
+            if show_gguf_source {
+                if let Some(name) = staged_gguf {
+                    p { "GGUF source staged in Instruments · {name}" }
+                } else {
+                    p { class: "muted", "Stage a local .gguf file with the semantic command bar before running conversion." }
+                }
+            }
+            if show_qcdn_project {
+                label {
+                    "Provisioned Q-CDN project ID"
+                    input {
+                        class: "input-field",
+                        value: "{qcdn_project}",
+                        maxlength: "128",
+                        oninput: move |event| qcdn_project.set(event.value()),
+                    }
+                }
+                p { class: "muted", "The host configuration supplies the source and destination for this project mirror." }
+            }
+            if show_vibe_source {
+                if has_vibe_admission {
+                    label {
+                        "Admitted VibeScript source"
+                        textarea {
+                            value: "{vibe_source}",
+                            maxlength: "65536",
+                            rows: "5",
+                            oninput: move |event| vibe_source.set(event.value()),
+                        }
+                    }
+                    p { class: "muted", "Use the exact source admitted by your current QualiaDB session. This draft is kept in memory." }
+                } else {
+                    p { class: "muted", "Governed VibeScript jobs require an authenticated QualiaDB project session and signed graph scope." }
+                }
+            }
+            if jobs.is_empty() {
+                p { class: "muted", "The job queue is empty." }
+            }
+            ul {
+                for job in jobs {
+                    {
+                        let ready = job.status.can_start();
+                        let blocked = job.status == OsJobStatus::Blocked;
+                        let running = job.status == OsJobStatus::Running;
+                        let can_start = can_run && ready && match job.kind {
+                            OsJobKind::GgufToP64Conversion => gguf_source.is_some(),
+                            OsJobKind::QcdnSwarmMerkleSync => has_qcdn_project,
+                            OsJobKind::GovernedVibeScriptBatch => has_vibe_admission && has_vibe_source,
+                            _ => true,
+                        };
+                        let can_cancel = can_edit && (!running || runner.is_some());
+                        let start_id = job.job_id.clone();
+                        let cancel_id = job.job_id.clone();
+                        let start_runner = runner.clone();
+                        let cancel_runner = runner.clone();
+                        let source = gguf_source.clone();
+                        let adopted = foundation.clone();
+                        let kind = job.kind;
+                        let label = job.status.label();
+                        rsx! {
+                            li {
+                                key: "{job.job_id}",
+                                strong { "{job.title} · {label}" }
+                                p { "{job.target_volume} · {job.detail}" }
+                                if ready || running {
+                                    div {
+                                        class: "input-row",
+                                        if ready {
+                                            button {
+                                                r#type: "button",
+                                                disabled: !can_start,
+                                                onclick: move |_| {
+                                                    let result = (|| {
+                                                        control_center_storage(state)?;
+                                                        let runner = start_runner.as_ref().ok_or("Background runner unavailable.")?;
+                                                        let input = match kind {
+                                                            OsJobKind::GgufToP64Conversion => OsJobInput::Gguf {
+                                                                source: source.clone().ok_or("Stage a local GGUF file first.")?,
+                                                            },
+                                                            OsJobKind::QcdnSwarmMerkleSync => {
+                                                                let project = qcdn_project();
+                                                                let project_id = project.trim();
+                                                                if project_id.is_empty() {
+                                                                    return Err("Enter the provisioned Q-CDN project ID.".into());
+                                                                }
+                                                                OsJobInput::QcdnMirror { project_id: project_id.to_owned() }
+                                                            }
+                                                            OsJobKind::GovernedVibeScriptBatch => {
+                                                                let foundation = adopted.clone().ok_or("Authenticate the QualiaDB project first.")?;
+                                                                let source = vibe_source();
+                                                                if source.trim().is_empty() {
+                                                                    return Err("Enter the exact admitted VibeScript source.".into());
+                                                                }
+                                                                OsJobInput::GovernedVibe { foundation, source }
+                                                            }
+                                                            _ => OsJobInput::Standard,
+                                                        };
+                                                        runner.start(&start_id, input)
+                                                    })();
+                                                    status.set(match result {
+                                                        Ok(()) => "Job submitted to the background runner.".into(),
+                                                        Err(error) => error,
+                                                    });
+                                                },
+                                                if blocked { "Retry" } else { "Run" }
+                                            }
+                                        }
+                                        button {
+                                            r#type: "button",
+                                            disabled: !can_cancel,
+                                            onclick: move |_| {
+                                                let result = control_center_storage(state).and_then(|storage| {
+                                                    if let Some(runner) = cancel_runner.as_ref() {
+                                                        runner.cancel(&cancel_id)
+                                                    } else {
+                                                        state.write().os_control_center.cancel_os_job(storage, &cancel_id).map(|_| ())
+                                                    }
+                                                });
+                                                status.set(match result {
+                                                    Ok(()) => "Cancellation requested.".into(),
+                                                    Err(error) => error,
+                                                });
+                                            },
+                                            if running { "Request cancellation" } else { "Cancel job" }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            p { role: "status", "{status}" }
+        }
+    }
+}
+
+#[component]
+fn QapLeaseMatrix(state: Signal<ShellState>) -> Element {
+    let foundation = try_consume_context::<AdoptedQualiaFoundation>();
+    let storage = session().map(|sess| sess.host.storage.as_path());
+    let shell = state.read();
+    let leases = shell.os_control_center.leases.clone();
+    let can_edit = shell.os_control_center_error.is_none() && storage.is_some();
+    let mut package_ids: Vec<_> = leases
+        .iter()
+        .map(|lease| lease.package_id.clone())
+        .collect();
+    package_ids.extend(
+        shell
+            .installed_qaps
+            .iter()
+            .filter(|qap| !qap.revoked)
+            .map(|qap| qap.package_id.clone()),
+    );
+    package_ids.sort();
+    package_ids.dedup();
+    // A retained policy row must never revive a revoked package.
+    package_ids.retain(|id| {
+        !shell
+            .installed_qaps
+            .iter()
+            .any(|qap| &qap.package_id == id && qap.revoked)
+    });
+    drop(shell);
+
+    let mut draft = use_signal(String::new);
+    let mut status = use_signal(String::new);
+    let mut check_again = use_signal(|| false);
+    let _ = check_again();
+    let selected_qap = {
+        let draft = draft.read();
+        package_ids
+            .iter()
+            .find(|id| id.as_str() == draft.as_str())
+            .or_else(|| package_ids.first())
+            .cloned()
+            .unwrap_or_default()
+    };
+    rsx! {
+        section {
+            class: "id-list qap-lease-matrix",
+            h4 { "Per-Qap Capability Lease Matrix" }
+            p { class: "muted", "A local deny blocks the capability. A local allow still requires a current canonical host grant." }
+            if package_ids.is_empty() {
+                p { "No Qaps are available for capability policy." }
+            } else {
+                div {
+                    class: "input-row",
+                    label {
+                        "Qap "
+                        select {
+                            value: "{selected_qap}",
+                            onchange: move |event| {
+                                draft.set(event.value());
+                                status.set(String::new());
+                            },
+                            for package_id in package_ids {
+                                option { key: "{package_id}", value: "{package_id}", "{package_id}" }
+                            }
+                        }
+                    }
+                    button {
+                        r#type: "button",
+                        disabled: storage.is_none(),
+                        onclick: move |_| {
+                            let checked = check_again();
+                            check_again.set(!checked);
+                        },
+                        "Recheck authority"
+                    }
+                }
+                table {
+                    aria_label: "Local preferences and effective Qap authority",
+                    thead {
+                        tr {
+                            th { scope: "col", "Capability" }
+                            th { scope: "col", "Local policy" }
+                            th { scope: "col", "Effective authority" }
+                            th { scope: "col", "Actions" }
+                        }
+                    }
+                    tbody {
+                        for scope in CapabilityLeaseScope::ALL {
+                            {
+                                let current = leases.iter().find(|lease| {
+                                    lease.package_id == selected_qap && lease.scope == scope && lease.epoch_generation != 0
+                                });
+                                let locally_allowed = current.is_some_and(|lease| lease.granted);
+                                let locally_denied = current.is_some_and(|lease| !lease.granted);
+                                let local_label = match current {
+                                    Some(lease) if lease.granted => "Allow with host grant",
+                                    Some(_) => "Explicit deny",
+                                    None => "No local preference",
+                                };
+                                let effective = storage.map_or(QapLeaseStatus::Unavailable, |storage| {
+                                    qap_lease_status(storage, &selected_qap, scope, foundation.as_ref())
+                                });
+                                let allow_id = selected_qap.clone();
+                                let deny_id = selected_qap.clone();
+                                rsx! {
+                                    tr {
+                                        key: "{scope.code()}",
+                                        th { scope: "row", "{scope.label()}" }
+                                        td { "{local_label}" }
+                                        td { "{effective.label()}" }
+                                        td {
+                                            div {
+                                                class: "input-row",
+                                                button {
+                                                    r#type: "button",
+                                                    aria_label: "Allow {scope.label()} with host authorization",
+                                                    disabled: !can_edit || locally_allowed,
+                                                    onclick: move |_| status.set(update_qap_preference(state, &allow_id, scope, true)),
+                                                    "Allow with host grant"
+                                                }
+                                                button {
+                                                    r#type: "button",
+                                                    aria_label: "Deny {scope.label()}",
+                                                    disabled: !can_edit || locally_denied,
+                                                    onclick: move |_| status.set(update_qap_preference(state, &deny_id, scope, false)),
+                                                    "Deny"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            p { role: "status", "{status}" }
+        }
+    }
+}
+
+fn update_qap_preference(
+    mut state: Signal<ShellState>,
+    package_id: &str,
+    scope: CapabilityLeaseScope,
+    allow: bool,
+) -> String {
+    let result = control_center_storage(state).and_then(|storage| {
+        state
+            .write()
+            .os_control_center
+            .set_qap_lease(storage, package_id, scope, allow)
+    });
+    match result {
+        Ok(lease) => format!("{} · {}", lease.scope.label(), lease.last_audit_note),
+        Err(error) => error,
+    }
+}
+
+#[component]
+fn BackupRecoveryPanel(mut state: Signal<ShellState>) -> Element {
+    let archive = state.read().last_q42j_backup.clone();
+    let mut selected = use_signal(Vec::<u8>::new);
+    let mut archive_id = use_signal(String::new);
+    let mut status = use_signal(String::new);
+    rsx! {
+        section {
+            class: "id-list portable-data-panel",
+            h4 { "Shamir Journal Backup & Recovery" }
+            p { class: "muted", "The archive contains encrypted public metadata. Keep staged shares with independent custodians." }
+            button {
+                r#type: "button",
+                class: "sanctum-issue",
+                onclick: move |_| {
+                    let Some(sess) = session() else {
+                        status.set("Open a local session to create a backup.".into());
+                        return;
+                    };
+                    match export_shamir_q42j_backup(&sess.host.storage, 2, 3) {
+                        Ok(archive) => {
+                            archive_id.set(archive.archive_id.clone());
+                            selected.set(Vec::new());
+                            state.write().last_q42j_backup = Some(archive);
+                            status.set("Encrypted archive and share files staged.".into());
+                        }
+                        Err(error) => status.set(error),
+                    }
+                },
+                "Export 2-of-3 Shamir .q42j Backup"
+            }
+            div {
+                class: "input-row",
+                label {
+                    "Saved backup ID "
+                    input {
+                        class: "input-field",
+                        value: "{archive_id}",
+                        maxlength: 32,
+                        oninput: move |event| archive_id.set(event.value()),
+                    }
+                }
+                button {
+                    r#type: "button",
+                    onclick: move |_| {
+                        let Some(sess) = session() else {
+                            status.set("Open a local session to load a backup.".into());
+                            return;
+                        };
+                        let id = archive_id();
+                        match load_shamir_q42j_backup(&sess.host.storage, id.trim()) {
+                            Ok(archive) => {
+                                selected.set(Vec::new());
+                                state.write().last_q42j_backup = Some(archive);
+                                status.set("Backup manifest loaded. Select the shares you can access.".into());
+                            }
+                            Err(error) => status.set(error),
+                        }
+                    },
+                    "Load saved manifest"
+                }
+            }
+            if let Some(archive) = archive {
+                {
+                    let threshold = archive.threshold_m;
+                    let total = archive.total_n;
+                    let archive_key = archive.archive_id.clone();
+                    let included = archive.included_sections.join(", ");
+                    let manifest = archive.share_files.first().and_then(|path| path.parent())
+                        .map(|folder| folder.join("archive.json"));
+                    let restore_ready = selected.read().len() >= usize::from(threshold);
+                    let share_paths: Vec<_> = archive.share_files.iter().map(|path| path.display().to_string()).collect();
+                    rsx! {
+                        p { class: "path", "Backup {archive_key} · {threshold} of {total} shares · {archive.payload_bytes} bytes" }
+                        p { "Included sections: {included}" }
+                        if let Some(path) = manifest {
+                            p { class: "path", "Manifest: {path.display()}" }
+                        }
+                        fieldset {
+                            class: "q42j-share-picker",
+                            legend { "Shares for recovery" }
+                            for (offset, path) in share_paths.into_iter().enumerate() {
+                                {
+                                    let index = (offset + 1) as u8;
+                                    let checked = selected.read().contains(&index);
+                                    rsx! {
+                                        label {
+                                            key: "{index}",
+                                            input {
+                                                r#type: "checkbox",
+                                                checked,
+                                                onchange: move |event| {
+                                                    let mut indices = selected.write();
+                                                    if event.checked() {
+                                                        if !indices.contains(&index) { indices.push(index); }
+                                                    } else {
+                                                        indices.retain(|chosen| *chosen != index);
+                                                    }
+                                                },
+                                            }
+                                            span { class: "path", "Share {index} · {path}" }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        button {
+                            r#type: "button",
+                            disabled: !restore_ready,
+                            onclick: move |_| {
+                                let Some(sess) = session() else {
+                                    status.set("Open a local session to recover a backup.".into());
+                                    return;
+                                };
+                                let shares = selected();
+                                status.set(match verify_and_restore_shamir_q42j_backup(&sess.host.storage, &archive, &shares) {
+                                    Ok(receipt) => receipt,
+                                    Err(error) => error,
+                                });
+                            },
+                            "Verify & recover metadata to a review copy"
+                        }
+                    }
+                }
+            }
+            p { class: "path", role: "status", "{status}" }
+        }
+    }
+}
+
+#[component]
+fn SettingsSolidExport(mut state: Signal<ShellState>) -> Element {
+    let shell = state.read();
+    let selected_entry = shell
+        .semantic_fs
+        .entries
+        .iter()
+        .find(|entry| entry.asset_uri == shell.selected_library_uri)
+        .cloned();
+    let receipt = shell.last_solid_receipt.as_ref().map(|receipt| {
+        (
+            receipt.triple_count,
+            receipt.sealed_nquin_parity,
+            receipt.file_path.clone(),
+        )
+    });
+    drop(shell);
+    let selected_title = selected_entry
+        .as_ref()
+        .map(|entry| entry.title.as_str())
+        .unwrap_or("Select a container in the Library")
+        .to_owned();
+    let eligible = selected_entry.as_ref().is_some_and(|entry| {
+        !entry.is_secret()
+            && entry.sensitivity.trim().eq_ignore_ascii_case("public")
+            && entry.commons_visibility == CommonsShareScope::Commons
+    });
+    let mut target_endpoint = use_signal(String::new);
+    let mut status = use_signal(String::new);
+    rsx! {
+        section {
+            class: "id-list portable-data-panel",
+            h4 { "Export Active Library Container to Solid Turtle (.ttl)" }
+            p { "Library selection: {selected_title}" }
+            p { class: "muted", "Exports eligible public Permissive Commons entries to a local Turtle file." }
+            label {
+                "HTTPS Pod endpoint label (optional) "
+                input {
+                    class: "input-field",
+                    value: "{target_endpoint}",
+                    maxlength: 2048,
+                    oninput: move |event| target_endpoint.set(event.value()),
+                }
+            }
+            button {
+                r#type: "button",
+                class: "sanctum-issue",
+                disabled: !eligible,
+                onclick: move |_| {
+                    let Some(sess) = session() else {
+                        status.set("Open a local session to export a Library entry.".into());
+                        return;
+                    };
+                    let Some(entry) = selected_entry.as_ref() else {
+                        status.set("Select a container in the Library.".into());
+                        return;
+                    };
+                    let endpoint = target_endpoint();
+                    match export_semantic_entry_to_solid_turtle(&sess.host.storage, entry, endpoint.trim()) {
+                        Ok(receipt) => {
+                            state.write().last_solid_receipt = Some(receipt);
+                            status.set("Local Turtle export saved.".into());
+                        }
+                        Err(error) => status.set(error),
+                    }
+                },
+                "Export local .ttl"
+            }
+            if let Some((triple_count, sealed_parity, file_path)) = receipt {
+                {
+                    let parity = format!("{sealed_parity:016x}");
+                    rsx! {
+                        p { "Last Turtle receipt: {triple_count} triples · NQuin48 parity {parity}" }
+                        if let Some(path) = file_path {
+                            p { class: "path", "{path.display()}" }
+                        }
+                    }
+                }
+            }
+            p { role: "status", "{status}" }
+        }
     }
 }

@@ -1879,10 +1879,31 @@ pub fn generate_tri_target_debian_suite(
         validate_human_centric_host_nomenclature(&s.display_hint)?;
     }
 
-    let suite_root = host
-        .storage
-        .join("delivery")
-        .join("tri-target-debian-trixie");
+    // All shell, CLI and background callers write the same package trees.
+    // Hold the sibling lock through index generation and archive publication.
+    let delivery = host.storage.join("delivery");
+    fs::create_dir_all(&delivery).map_err(|error| error.to_string())?;
+    let lock_path = delivery.join("tri-target-debian.lock");
+    if fs::symlink_metadata(&lock_path).is_ok_and(|metadata| !metadata.is_file()) {
+        return Err("The Debian build lock must be a regular file".into());
+    }
+    let delivery_lock = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(lock_path)
+        .map_err(|error| format!("Open Debian build lock: {error}"))?;
+    match delivery_lock.try_lock() {
+        Ok(()) => {}
+        Err(std::fs::TryLockError::WouldBlock) => {
+            return Err("Another operation is building the tri-target Debian suite".into());
+        }
+        Err(std::fs::TryLockError::Error(error)) => {
+            return Err(format!("Lock the tri-target Debian suite: {error}"));
+        }
+    }
+    let suite_root = delivery.join("tri-target-debian-trixie");
     let desktop_tree = suite_root.join("webizen-desktop-appliance_0.1.0_amd64");
     let mobile_tree = suite_root.join("webizen-mobile-avf_0.1.0_arm64");
     let host_tree = suite_root.join("webizen-hostd_0.1.0_amd64");
@@ -2790,6 +2811,20 @@ mod tests {
         assert_eq!(fabric.stewards.len(), 4);
 
         // 10. Generate the Tri-Target Debian 13 Trixie .deb Suite (Desktop amd64 + Mobile AVF arm64 + Host amd64)
+        let delivery = host.storage.join("delivery");
+        fs::create_dir_all(&delivery).unwrap();
+        let build_lock = fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(delivery.join("tri-target-debian.lock"))
+            .unwrap();
+        build_lock.try_lock().unwrap();
+        let blocked = generate_tri_target_debian_suite(&host, &gpu, &fabric).unwrap_err();
+        assert!(blocked.contains("Another operation is building"));
+        drop(build_lock);
+
         let suite = generate_tri_target_debian_suite(&host, &gpu, &fabric)
             .expect("generate tri-target debian suite");
         assert!(suite.desktop_deb_tree.join("DEBIAN/control").is_file());

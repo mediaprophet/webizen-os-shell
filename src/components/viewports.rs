@@ -33,7 +33,7 @@ use webizen_ua_os::{
     HOLO_MAX_RAYMARCH_STEPS,
 };
 
-use crate::state::{session, ShellState};
+use crate::state::{session, ShellState, VolumeStage};
 
 const MAX_HARMONIC: u8 = 4;
 const MAX_STEPS: u32 = HOLO_MAX_RAYMARCH_STEPS;
@@ -90,6 +90,8 @@ struct HoloViewportControl {
     pitch: f32,
     zoom: f32,
     raymarch_steps: u32,
+    submitted_extent: Option<(u32, u32)>,
+    fallback_extent: Option<(u32, u32)>,
 }
 
 impl HoloViewportControl {
@@ -103,6 +105,8 @@ impl HoloViewportControl {
             pitch: 0.35,
             zoom: 1.0,
             raymarch_steps: 24,
+            submitted_extent: None,
+            fallback_extent: None,
         }
     }
 
@@ -190,7 +194,6 @@ pub struct WebizenHolo10dSurfaceDelegate {
     focused: bool,
     phase: f32,
     previous_frame: Option<Instant>,
-    fallback_seen: bool,
 }
 
 impl WebizenHolo10dSurfaceDelegate {
@@ -203,7 +206,6 @@ impl WebizenHolo10dSurfaceDelegate {
             focused: false,
             phase: 0.0,
             previous_frame: None,
-            fallback_seen: false,
         }
     }
 
@@ -401,6 +403,11 @@ impl EtalonSurfaceDelegate for WebizenHolo10dSurfaceDelegate {
         }
         ctx.queue.submit([encoder.finish()]);
         etalon_scope_result(validation)?;
+        let extent = Some((ctx.width, ctx.height));
+        if view.submitted_extent != extent {
+            controls(&self.control).submitted_extent = extent;
+            self.window.request_redraw();
+        }
         Ok(if view.animating {
             RenderOutcome::ContinuousRedraw
         } else {
@@ -412,6 +419,7 @@ impl EtalonSurfaceDelegate for WebizenHolo10dSurfaceDelegate {
         let view = controls(&self.control).clone();
         let phase = self.frame_phase(view.animating);
         let mut scene = Scene::new();
+        let fallback_extent = Some((width, height));
         let (width, height) = (f64::from(width), f64::from(height));
         let extent = width.min(height);
         let origin = Point::new(width * 0.5, height * 0.5);
@@ -457,10 +465,12 @@ impl EtalonSurfaceDelegate for WebizenHolo10dSurfaceDelegate {
                 );
             }
         }
-        if view.animating || !self.fallback_seen {
+        if view.fallback_extent != fallback_extent {
+            controls(&self.control).fallback_extent = fallback_extent;
+            self.window.request_redraw();
+        } else if view.animating {
             self.window.request_redraw();
         }
-        self.fallback_seen = true;
         scene
     }
 
@@ -532,7 +542,9 @@ impl EtalonSurfaceDelegate for WebizenHolo10dSurfaceDelegate {
         self.gpu = None;
         self.dragging_from = None;
         self.previous_frame = None;
-        self.fallback_seen = false;
+        let mut control = controls(&self.control);
+        control.submitted_extent = None;
+        control.fallback_extent = None;
     }
 }
 
@@ -793,9 +805,37 @@ fn make_viewport(
 
 #[component]
 pub fn Holo10dViewport(
-    mut state: Signal<ShellState>,
+    state: Signal<ShellState>,
     specimen_label: String,
     #[props(default)] specimen_id: String,
+) -> Element {
+    let package = match state.read().current_stage {
+        VolumeStage::Browser => Some("Browser"),
+        VolumeStage::Poet => Some("Poet"),
+        VolumeStage::Anatomy => Some("Anatomy"),
+        VolumeStage::Library => Some("Library"),
+        _ => None,
+    };
+    if session().is_some()
+        && package.is_some_and(|package| {
+            state.read().blocks_live_qap_lease(
+                package,
+                webizen_ua_os::CapabilityLeaseScope::EtalonGpuSurface,
+            )
+        })
+    {
+        return rsx! {
+            p { role: "status", "The installed Qap policy blocks this Etalon surface." }
+        };
+    }
+    rsx! { AllowedHolo10dViewport { state, specimen_label, specimen_id } }
+}
+
+#[component]
+fn AllowedHolo10dViewport(
+    mut state: Signal<ShellState>,
+    specimen_label: String,
+    specimen_id: String,
 ) -> Element {
     let window = use_window();
     let renderer = try_consume_context::<AetherNativeWindowRenderer>();
@@ -848,13 +888,18 @@ pub fn Holo10dViewport(
         .filter(|(query, _)| query == &active_specimen_id)
         .map(|(_, result)| result.clone());
     let (specimen, specimen_status) = match result {
-        Some(Ok(specimen)) => (
-            Some(specimen.clone()),
-            format!(
-                "{} · verified Webizen HOLO header · {} proxy segments · {} wavefield records declared",
+        Some(Ok(specimen)) => {
+            let evidence = if specimen.container_profile == "qualiadb-mid2-10d-v2" {
+                "MID2/HOLO integrity verified"
+            } else {
+                "Local Rehearsal · compact HOLO integrity verified"
+            };
+            let status = format!(
+                "{} · {evidence} · {} segment records · {} wavefield records",
                 specimen.title, specimen.holo_segment_count, specimen.wavefield_count
-            ),
-        ),
+            );
+            (Some(specimen), status)
+        }
         Some(Err(error)) => (None, format!("Procedural projection · {error}")),
         None => (None, String::from("Resolving local HOLO specimen…")),
     };
@@ -894,20 +939,43 @@ pub fn Holo10dViewport(
             let Some(entry) = cache.borrow().as_ref().cloned() else {
                 return;
             };
-            let animating = controls(&entry.control).animating;
+            let (animating, submitted_extent, fallback_extent) = {
+                let control = controls(&entry.control);
+                (
+                    control.animating,
+                    control.submitted_extent,
+                    control.fallback_extent,
+                )
+            };
             if state.peek().holo_wireframe_animating != animating {
                 state.write().holo_wireframe_animating = animating;
             }
+            let fallback = || {
+                fallback_extent.map_or_else(
+                    || String::from("Awaiting vector fallback scene"),
+                    |(width, height)| format!("Vector fallback scene {width} × {height}"),
+                )
+            };
             let surface = match (entry.read_surface)() {
                 EtalonViewportState::Suspended => String::from("Viewport suspended"),
-                EtalonViewportState::Active => String::from("Etalon projection active"),
-                EtalonViewportState::CpuFallbackNotice(note) => note,
+                EtalonViewportState::Active => submitted_extent.map_or_else(
+                    || String::from("Etalon prepared · awaiting first frame"),
+                    |(width, height)| format!("Etalon frame submitted · {width} × {height}"),
+                ),
+                EtalonViewportState::CpuFallbackNotice(note) => format!("{note} · {}", fallback()),
                 EtalonViewportState::Faulted(error) => {
-                    format!(
-                        "Etalon projection unavailable ({error:?}). Showing the vector fallback."
-                    )
+                    format!("Etalon fault ({error:?}) · {}", fallback())
                 }
             };
+            let surface_changed =
+                state.peek().renderer_health.active_holo_surface_status != surface;
+            if surface_changed {
+                state
+                    .write()
+                    .renderer_health
+                    .active_holo_surface_status
+                    .clone_from(&surface);
+            }
             let next = if let Some(renderer) = &renderer {
                 let health = renderer.health();
                 let health_label = if health.faulted {
@@ -931,6 +999,12 @@ pub fn Holo10dViewport(
         }
     });
 
+    use_drop(move || {
+        if let Ok(mut shell) = state.try_write() {
+            shell.renderer_health.active_holo_surface_status = "No HOLO surface observation".into();
+        }
+    });
+
     let Some(entry) = entry else {
         return VNode::empty();
     };
@@ -944,7 +1018,7 @@ pub fn Holo10dViewport(
         let changed =
             previous != current || control.mode != mode || control.harmonic_k != initial_k;
         if changed {
-            control.specimen = specimen;
+            control.specimen = specimen.clone();
             control.mode = mode;
             control.harmonic_k = initial_k;
         }
@@ -1013,6 +1087,12 @@ pub fn Holo10dViewport(
                     }
                 }
             }
+            if let Some(scene) = specimen {
+                HoloSceneInspector {
+                    key: "{scene.sha3_256_hex}",
+                    specimen: scene,
+                }
+            }
             object {
                 class: "holo-viewport-object",
                 tabindex: "0",
@@ -1076,6 +1156,86 @@ pub fn Holo10dViewport(
 }
 
 #[component]
+fn HoloSceneInspector(specimen: Arc<VerifiedHolo10dSpecimen>) -> Element {
+    use webizen_ua_os::MultiScaleStratumLayer;
+
+    let mut filter = use_signal(|| None::<MultiScaleStratumLayer>);
+    let selected = filter();
+    let leaves = specimen
+        .constituent_leaves
+        .iter()
+        .filter(|leaf| selected.is_none_or(|level| leaf.stratum == level));
+    let no_matching_leaves = leaves.clone().next().is_none();
+    rsx! {
+        section {
+            class: "holo-constituency",
+            h5 { "Scene strata and constituent references" }
+            p { class: "pillet", "{specimen.container_profile}" }
+            div {
+                class: "shader-mode-pills",
+                role: "group",
+                aria_label: "Filter constituent references by MSTR level",
+                button {
+                    class: "ribbon-btn",
+                    r#type: "button",
+                    aria_pressed: if selected.is_none() { "true" } else { "false" },
+                    onclick: move |_| filter.set(None),
+                    "All levels"
+                }
+                for level in MultiScaleStratumLayer::ALL {
+                    button {
+                        key: "{level.code()}",
+                        class: "ribbon-btn",
+                        r#type: "button",
+                        title: "{level.title()}",
+                        aria_pressed: if selected == Some(level) { "true" } else { "false" },
+                        onclick: move |_| filter.set(Some(level)),
+                        if specimen.active_strata.contains(&level) {
+                            "{level.code()} · active"
+                        } else {
+                            "{level.code()}"
+                        }
+                    }
+                }
+            }
+            if no_matching_leaves {
+                p { "No AREF leaves in the selected levels." }
+            } else {
+                div {
+                    style: "overflow-x: auto",
+                    table {
+                        aria_label: "AREF / IOVR / INST constituent leaves",
+                        thead {
+                            tr {
+                                th { scope: "col", "AREF slot" }
+                                th { scope: "col", "Child reference" }
+                                th { scope: "col", "Stratum" }
+                                th { scope: "col", "Translation (x, y, z)" }
+                                th { scope: "col", "IOVR / INST" }
+                            }
+                        }
+                        tbody {
+                            for leaf in leaves {
+                                tr {
+                                    key: "{leaf.aref_slot}",
+                                    td { "{leaf.aref_slot}" }
+                                    td { style: "overflow-wrap: anywhere", "{leaf.child_uri}" }
+                                    td { "{leaf.stratum.code()}" }
+                                    td {
+                                        "{leaf.motor_translation[0]:.3}, {leaf.motor_translation[1]:.3}, {leaf.motor_translation[2]:.3}"
+                                    }
+                                    td { "{leaf.iovr_override_summary}" }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[component]
 pub fn BrowserChoraSurface(state: Signal<ShellState>) -> Element {
     let shell = state.read();
     let mode = shell.browser_mode;
@@ -1099,28 +1259,189 @@ pub fn BrowserChoraSurface(state: Signal<ShellState>) -> Element {
             return rsx! { TrustedBrowserSurface { key: "{mode.code()}:{slot}", state, slot, mode } };
         }
     }
-    rsx! { BridgePreview { mode, slot } }
+    let reason = if !cfg!(all(feature = "chora", not(target_arch = "wasm32"))) {
+        "This build has no Ring C worker support."
+    } else {
+        "The Ring C worker binary slot is unavailable."
+    };
+    rsx! {
+        WorkerSupervisorPanel { state, mode, worker_slot: slot.clone(), inactive_reason: reason,
+            route_detail: String::new(), can_invalidate: false, oninvalidate: move |_| {} }
+        BridgePreview { mode, slot }
+    }
+}
+
+fn graph_snapshot_probe(
+    mode: BrowserExecutionMode,
+) -> Result<String, aether_qualia_host::chora_protocol::ReplyError> {
+    use aether_qualia_host::{
+        chora_protocol::{
+            CallerContext, Control, ControlEnvelope, ReplyError, RouteStamp, MAX_REPLY_BYTES,
+        },
+        vibescript_abi::NQuin48,
+        ChoraGraphRoutes,
+    };
+    const CHANNEL: &str = "qualia.graph.snapshot";
+    let stamp = RouteStamp {
+        session: [1; 16],
+        view: 1,
+        generation: 0,
+        document: 0,
+        viewport: 0,
+    };
+    let id = [2; 16];
+    let request = ControlEnvelope {
+        stamp,
+        sequence: 1,
+        message: Control::PageRequest {
+            id,
+            caller: CallerContext {
+                engine_instance: [3; 16],
+                webview: "native-preview".into(),
+                pipeline: "native-preview".into(),
+                navigation_epoch: [4; 16],
+                origin: "https://preview.invalid".into(),
+                private_browsing: false,
+            },
+            channel: CHANNEL.into(),
+            payload: "{}".into(),
+        },
+    };
+    // No page route is registered by this button. The real route checker must
+    // deny this unsponsored request before a local fixture is shown natively.
+    match ChoraGraphRoutes::new().accept(&request, Instant::now()) {
+        Err(ReplyError::Denied) => {}
+        _ => return Err(ReplyError::InvalidContext),
+    }
+    if mode != BrowserExecutionMode::HybridAugmented {
+        return Err(ReplyError::Denied);
+    }
+    let example_context = "urn:webizen:example:public-route";
+    let row = NQuin48::invariant(
+        example_context,
+        "urn:webizen:example:route-status",
+        webizen_ua_os::q_hash_60("local native fixture"),
+    );
+    let body = serde_json::to_string_pretty(&serde_json::json!({
+        "context": webizen_ua_os::q_hash_60(example_context).to_string(),
+        "revision": "0",
+        "quins": [row.0.map(|word| word.to_string())],
+    }))
+    .map_err(|_| ReplyError::Unavailable)?;
+    if body.len() > MAX_REPLY_BYTES {
+        return Err(ReplyError::TooLarge);
+    }
+    let reply = ControlEnvelope {
+        stamp,
+        sequence: 2,
+        message: Control::PageReply {
+            id,
+            result: Ok(body.clone()),
+        },
+    };
+    reply.validate().map_err(|_| ReplyError::TooLarge)?;
+    Ok(body)
+}
+
+#[component]
+fn WorkerSupervisorPanel(
+    state: Signal<ShellState>,
+    mode: BrowserExecutionMode,
+    worker_slot: String,
+    inactive_reason: &'static str,
+    route_detail: String,
+    can_invalidate: bool,
+    oninvalidate: EventHandler<()>,
+) -> Element {
+    let mut graph_test = use_signal(|| {
+        None::<(
+            BrowserExecutionMode,
+            Result<String, aether_qualia_host::chora_protocol::ReplyError>,
+        )>
+    });
+    let preview = graph_test
+        .read()
+        .as_ref()
+        .filter(|(tested_mode, _)| mode == *tested_mode)
+        .map(|(_, result)| result.clone());
+    let snapshot = state.read().chora_supervisor.clone();
+    let slot = if worker_slot.is_empty() {
+        "Unconfigured"
+    } else {
+        worker_slot.as_str()
+    };
+    let worker_state = if inactive_reason.is_empty() {
+        snapshot.worker_state_label.as_str()
+    } else {
+        inactive_reason
+    };
+    let frame = if snapshot.frame_seq == 0 {
+        String::from("Awaiting first frame")
+    } else {
+        snapshot.frame_seq.to_string()
+    };
+    rsx! {
+        section {
+            class: "id-list",
+            h4 { "Ring C Worker & RouteStamp Supervisor" }
+            dl {
+                class: "kv",
+                dt { "Worker binary" }
+                dd { class: "path", "{slot}" }
+                dt { "Worker state" }
+                dd { "{worker_state}" }
+                if snapshot.view_id != 0 && inactive_reason.is_empty() {
+                    dt { "Session tag · view · accepted frame sequence" }
+                    dd { "{snapshot.session_id:016x} · {snapshot.view_id} · {frame}" }
+                    dt { "Route generation · document · viewport" }
+                    dd { "{route_detail}" }
+                    dt { "Granted graph routes · pending page requests" }
+                    dd { "{snapshot.registered_routes} · {snapshot.pending_page_requests}" }
+                    dt { "Inputs written to worker pipe" }
+                    dd {
+                        "Pointer {snapshot.forwarded_pointer_events} · Wheel {snapshot.forwarded_wheel_events} · Key {snapshot.forwarded_key_events} · IME {snapshot.forwarded_ime_events}"
+                    }
+                    dt { "Forwarded focus" }
+                    dd { if snapshot.focus_active { "Active" } else { "Inactive" } }
+                }
+                if !snapshot.last_route_invalidation_reason.is_empty() {
+                    dt { "Last invalidation" }
+                    dd { "{snapshot.last_route_invalidation_reason}" }
+                }
+            }
+            div {
+                class: "input-row",
+                button {
+                    r#type: "button", class: "ribbon-btn",
+                    onclick: move |_| graph_test.set(Some((mode, graph_snapshot_probe(mode)))),
+                    "Test ChoraGraphRoutes Snapshot"
+                }
+                button {
+                    r#type: "button", class: "ribbon-btn",
+                    disabled: !can_invalidate,
+                    onclick: move |_| oninvalidate.call(()),
+                    "Invalidate Active RouteStamp"
+                }
+            }
+            p { class: "muted",
+                "Manual invalidation reloads the current page and clears its pending requests. The worker returns the protocol invalidation acknowledgement."
+            }
+            match preview {
+                Some(Ok(body)) => rsx! {
+                    p { role: "status", "Local Preview · qualia.graph.snapshot · the synthetic caller has no graph grant." }
+                    pre { "{body}" }
+                },
+                Some(Err(error)) => rsx! { p { role: "status", "qualia.graph.snapshot · {error:?}" } },
+                None => rsx! {},
+            }
+        }
+    }
 }
 
 #[component]
 fn BridgePreview(mode: BrowserExecutionMode, slot: String) -> Element {
     let mut result = use_signal(|| None::<String>);
-    let cases = [
-        ("qualia-10d", HybridWebCapabilityChannel::Mount10dHoloEmbed),
-        ("solid-ldp", HybridWebCapabilityChannel::SolidDataboxSync),
-        (
-            "commons-receipt",
-            HybridWebCapabilityChannel::CommonsContributionReceipt,
-        ),
-        (
-            "nquin-provenance",
-            HybridWebCapabilityChannel::VerifyQecpCredential,
-        ),
-        (
-            "vibescript-eval",
-            HybridWebCapabilityChannel::GovernedVibeScriptEval,
-        ),
-    ];
+    let cases = HybridWebCapabilityChannel::ALL;
     let selected_mode = mode.title();
     let worker_slot = if slot.is_empty() {
         String::from("Worker slot is not configured")
@@ -1135,24 +1456,27 @@ fn BridgePreview(mode: BrowserExecutionMode, slot: String) -> Element {
             p { "{selected_mode} · {worker_slot}" }
             p { "These tests use a synthetic origin and payload. The VibeScript test evaluates one isolated scalar expression." }
             div { class: "input-row",
-                for (label, channel) in cases {
-                    button {
-                        key: "{label}", r#type: "button", class: "ribbon-btn",
-                        onclick: move |_| {
-                            const TEST_ORIGIN: &str = "https://preview.invalid";
-                            let response = if let Some(adopted) = session() {
-                                let payload = match channel {
-                                    HybridWebCapabilityChannel::GovernedVibeScriptEval => "= 21 + 21",
-                                    _ => "urn:webizen:preview:public-specimen.10d",
-                                };
-                                let tested = evaluate_hybrid_page_request(mode, &adopted.identifiers, TEST_ORIGIN, channel, payload);
-                                format!("{label}: {} · NQuin48 parity {:016x}", tested.reply_payload, tested.sealed_nquin_parity)
-                            } else {
-                                format!("{label}: launch the adopted host session to test the preview policy")
-                            };
-                            result.set(Some(response));
-                        },
-                        "Test {label}"
+                for channel in cases {
+                    {
+                        let label = channel.spec().channel_id;
+                        rsx! {
+                            button {
+                                key: "{label}", r#type: "button", class: "ribbon-btn",
+                                onclick: move |_| {
+                                    const TEST_ORIGIN: &str = "https://preview.invalid";
+                                    let response = if let Some(adopted) = session() {
+                                        let tested = evaluate_hybrid_page_request(
+                                            mode, &adopted.identifiers, TEST_ORIGIN, channel, channel.local_test_payload(),
+                                        );
+                                        format!("{label}: {} · NQuin48 parity {:016x}", tested.reply_payload, tested.sealed_nquin_parity)
+                                    } else {
+                                        format!("{label}: launch the adopted host session to test the preview policy")
+                                    };
+                                    result.set(Some(response));
+                                },
+                                "Test {label}"
+                            }
+                        }
                     }
                 }
             }
@@ -1166,37 +1490,309 @@ fn BridgePreview(mode: BrowserExecutionMode, slot: String) -> Element {
 #[cfg(all(feature = "chora", not(target_arch = "wasm32")))]
 mod traditional {
     use super::*;
+    use aether::aether_core::try_consume_context;
     use aether_native::{
         aether_chora_client::{
             protocol::{
-                Control, ExecutionProfile, Nonce, ProtocolError, ReplyError, RouteStamp,
-                MAX_URL_BYTES,
+                CallerContext, Control, ControlEnvelope, ExecutionProfile, Nonce, ProtocolError,
+                ReplyError, RouteStamp, MAX_URL_BYTES,
             },
             ChoraClient,
         },
         chora_frame::ChoraFrameWidget,
     };
+    use aether_qualia_host::{ChoraGraphRoutes, NativeGraphBridge};
     use std::{
         path::Path,
-        sync::atomic::{AtomicUsize, Ordering},
+        sync::{
+            atomic::{AtomicBool, AtomicUsize, Ordering},
+            mpsc,
+        },
+    };
+    use webizen_ua_os::{
+        authorize_qap_graph_read, require_qap_capability, AdoptedQualiaFoundation,
+        CapabilityLeaseScope, MAX_GOVERNED_VIBESCRIPT_CELL_BYTES,
     };
 
-    use webizen_ua_os::MAX_GOVERNED_VIBESCRIPT_CELL_BYTES;
+    const GRAPH_SNAPSHOT_CHANNEL: &str = "qualia.graph.snapshot";
 
     static NEXT_WORKER_WIDGET: AtomicUsize = AtomicUsize::new(1);
 
     struct WorkerSession {
         client: ChoraClient,
         sent_address: Option<String>,
+        observed_stamp: Option<RouteStamp>,
+        manual_reload_generation: Option<u64>,
+        last_published: Option<Instant>,
+        graph_read: Option<GraphReadTask>,
     }
 
-    #[derive(Clone, PartialEq, Eq)]
+    fn refresh_worker_supervisor(
+        mut state: Signal<ShellState>,
+        worker: &mut WorkerSession,
+        status: &str,
+        pending: bool,
+    ) -> Option<RouteStamp> {
+        let now = Instant::now();
+        if worker
+            .last_published
+            .is_some_and(|at| now.duration_since(at) < Duration::from_millis(150))
+        {
+            return None;
+        }
+        let transport = worker.client.route_telemetry().ok()?;
+        let stamp = transport.stamp;
+        let mut snapshot = state.peek().chora_supervisor.clone();
+        if let Some(previous) = worker.observed_stamp {
+            if previous != stamp {
+                let reason = if previous.generation != stamp.generation {
+                    "Navigation boundary"
+                } else if previous.viewport != stamp.viewport {
+                    "Viewport resize boundary"
+                } else {
+                    "Worker document boundary"
+                };
+                snapshot.invalidate_route(stamp.view, reason);
+            }
+        }
+        snapshot.session_id = u64::from_be_bytes(
+            stamp.session[..8]
+                .try_into()
+                .expect("RouteStamp session prefix"),
+        );
+        snapshot.view_id = stamp.view;
+        snapshot.frame_seq = transport.last_frame_sequence.unwrap_or(0);
+        snapshot.registered_routes = usize::from(
+            worker
+                .graph_read
+                .as_ref()
+                .is_some_and(|read| read.registered.load(Ordering::Acquire)),
+        );
+        snapshot.pending_page_requests = transport
+            .queued_page_requests
+            .saturating_add(usize::from(pending))
+            .saturating_add(usize::from(worker.graph_read.is_some()));
+        snapshot.forwarded_pointer_events = transport.forwarded_pointer_events;
+        snapshot.forwarded_wheel_events = transport.forwarded_wheel_events;
+        snapshot.forwarded_key_events = transport.forwarded_key_events;
+        snapshot.forwarded_ime_events = transport.forwarded_ime_events;
+        snapshot.focus_active = transport.focus_active;
+        snapshot.worker_state_label = status.to_owned();
+        worker.observed_stamp = Some(stamp);
+        worker.last_published = Some(now);
+        let changed = state.peek().chora_supervisor != snapshot;
+        if changed {
+            state.write().chora_supervisor = snapshot;
+        }
+        Some(stamp)
+    }
+
+    #[derive(Clone)]
     struct PendingScript {
         stamp: RouteStamp,
         id: Nonce,
         origin: String,
         payload: String,
         expires_at: Instant,
+        graph_caller: Option<CallerContext>,
+        graph_authority: Option<AdoptedQualiaFoundation>,
+        sequence: u64,
+    }
+
+    struct GraphReply {
+        snapshot: String,
+        authority_generation: u64,
+    }
+
+    struct GraphReadTask {
+        request: PendingScript,
+        receiver: mpsc::Receiver<Result<GraphReply, ReplyError>>,
+        registered: Arc<AtomicBool>,
+        result: Option<Result<GraphReply, ReplyError>>,
+    }
+
+    fn configured_graph_origin() -> Option<String> {
+        let configured = std::env::var("WEBIZEN_QUALIA_GRAPH_ORIGIN").ok()?;
+        let url = url::Url::parse(&configured).ok()?;
+        (url.scheme() == "https" && url.origin().ascii_serialization() == configured)
+            .then_some(configured)
+    }
+
+    fn same_graph_authority(expected: &AdoptedQualiaFoundation) -> bool {
+        let Some(grant) = expected.graph_grant() else {
+            return false;
+        };
+        let Ok(elapsed) = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) else {
+            return false;
+        };
+        let now = elapsed.as_secs();
+        grant.grant.valid_from_unix <= now
+            && now < grant.grant.valid_until_unix
+            && try_consume_context::<AdoptedQualiaFoundation>().is_some_and(|current| {
+                current.session() == expected.session() && current.graph_grant() == Some(grant)
+            })
+    }
+
+    fn start_graph_read(
+        worker: &mut WorkerSession,
+        request: PendingScript,
+    ) -> Result<(), ReplyError> {
+        if worker.graph_read.is_some() {
+            return Err(ReplyError::Busy);
+        }
+        let caller = request
+            .graph_caller
+            .clone()
+            .ok_or(ReplyError::InvalidContext)?;
+        let foundation = request
+            .graph_authority
+            .as_ref()
+            .filter(|host| same_graph_authority(host))
+            .cloned()
+            .ok_or(ReplyError::Denied)?;
+        let storage = session().ok_or(ReplyError::Denied)?.host.storage.clone();
+        let grant = foundation
+            .graph_grant()
+            .cloned()
+            .ok_or(ReplyError::Denied)?;
+        let session = foundation.session();
+        let authority = foundation.authority();
+        let envelope = ControlEnvelope {
+            stamp: request.stamp,
+            sequence: request.sequence,
+            message: Control::PageRequest {
+                id: request.id,
+                caller: caller.clone(),
+                channel: GRAPH_SNAPSHOT_CHANNEL.to_owned(),
+                payload: request.payload.clone(),
+            },
+        };
+        let id = request.id;
+        let expires = request.expires_at;
+        let (sender, receiver) = mpsc::sync_channel(1);
+        let registered = Arc::new(AtomicBool::new(false));
+        let owner_registered = Arc::clone(&registered);
+        std::thread::Builder::new()
+            .name("webizen-graph-read".into())
+            .spawn(move || {
+                let result = (|| {
+                    if Instant::now() >= expires {
+                        return Err(ReplyError::TimedOut);
+                    }
+                    authorize_qap_graph_read(&storage, "Browser", &foundation)
+                        .map_err(|_| ReplyError::Denied)?;
+                    let authority_generation = authority
+                        .workflow_evidence(&session)
+                        .map_err(|_| ReplyError::Denied)?
+                        .authority_generation;
+                    let bridge = NativeGraphBridge::connect(authority, &session, &grant)
+                        .map_err(|_| ReplyError::Denied)?;
+                    let mut routes = ChoraGraphRoutes::new();
+                    routes.register(
+                        envelope.stamp,
+                        caller,
+                        ExecutionProfile::TrustedEmbedding,
+                        bridge,
+                    )?;
+                    owner_registered.store(true, Ordering::Release);
+                    routes.accept(&envelope, Instant::now())?;
+                    routes
+                        .finish(envelope.stamp, id, Instant::now())
+                        .map(|snapshot| GraphReply {
+                            snapshot,
+                            authority_generation,
+                        })
+                })();
+                owner_registered.store(false, Ordering::Release);
+                let _ = sender.try_send(result);
+            })
+            .map_err(|_| ReplyError::Unavailable)?;
+        worker.graph_read = Some(GraphReadTask {
+            request,
+            receiver,
+            registered,
+            result: None,
+        });
+        Ok(())
+    }
+
+    fn poll_graph_read(
+        worker: &mut WorkerSession,
+        mode: BrowserExecutionMode,
+        address: &str,
+    ) -> Option<String> {
+        let active = worker.graph_read.as_ref()?;
+        match check_script_route(worker, &active.request, mode, address) {
+            Err(ReplyError::Busy) => return None,
+            Err(_) => {
+                let _ = worker.client.reply(
+                    active.request.stamp,
+                    active.request.id,
+                    Err(ReplyError::Cancelled),
+                );
+                worker.graph_read = None;
+                return Some("The graph request expired or its route changed.".into());
+            }
+            Ok(()) => {}
+        }
+        let same_authority = active
+            .request
+            .graph_authority
+            .as_ref()
+            .is_some_and(same_graph_authority);
+        let active = worker.graph_read.as_mut()?;
+        if !same_authority {
+            active.result = Some(Err(ReplyError::Denied));
+        } else if active.result.is_none() {
+            active.result = match active.receiver.try_recv() {
+                Ok(result) => Some(result),
+                Err(mpsc::TryRecvError::Empty) => return None,
+                Err(mpsc::TryRecvError::Disconnected) => Some(Err(ReplyError::Unavailable)),
+            };
+        }
+        let stamp = active.request.stamp;
+        let id = active.request.id;
+        if let Some(Ok(reply)) = active.result.as_ref() {
+            let current = active.request.graph_authority.as_ref().is_some_and(|host| {
+                host.authority()
+                    .publication_is_current(&host.session(), reply.authority_generation)
+            });
+            let lease_allowed = session().is_some_and(|session| {
+                require_qap_capability(
+                    &session.host.storage,
+                    "Browser",
+                    CapabilityLeaseScope::QualiaQ42Storage,
+                )
+                .is_ok()
+            });
+            if !current || !lease_allowed {
+                active.result = Some(Err(ReplyError::Denied));
+            }
+        }
+        let result = match active.result.as_ref()? {
+            Ok(reply) => Ok(reply.snapshot.clone()),
+            Err(error) => Err(error.clone()),
+        };
+        let status = match &result {
+            Ok(_) => "Live Verified · canonical graph snapshot queued for the approved origin."
+                .to_owned(),
+            Err(error) => format!("Graph snapshot request refused: {error:?}"),
+        };
+        match worker.client.reply(stamp, id, result) {
+            Ok(()) => {
+                worker.graph_read = None;
+                Some(status)
+            }
+            Err(ProtocolError::Busy) => None,
+            Err(ProtocolError::TooLarge) => {
+                worker.graph_read.as_mut()?.result = Some(Err(ReplyError::TooLarge));
+                None
+            }
+            Err(error) => {
+                worker.graph_read = None;
+                Some(format!("Graph reply could not reach the page: {error}"))
+            }
+        }
     }
 
     fn admitted_https_origin(address: &str, origin: &str) -> bool {
@@ -1251,7 +1847,7 @@ mod traditional {
 
     #[component]
     pub(super) fn TrustedBrowserSurface(
-        state: Signal<ShellState>,
+        mut state: Signal<ShellState>,
         slot: String,
         mode: BrowserExecutionMode,
     ) -> Element {
@@ -1261,17 +1857,24 @@ mod traditional {
         let mut status = use_signal(|| String::from("Worker is stopped"));
         let mut pending_script = use_signal(|| None::<PendingScript>);
         let mut script_notice = use_signal(|| None::<String>);
+        let mut route_detail = use_signal(String::new);
+        let allowed_graph_origin = use_hook(configured_graph_origin);
 
         use_drop({
             let running = Rc::clone(&running);
             move || {
                 if let Some(owned) = running.borrow_mut().take() {
                     owned.client.shutdown();
+                    state
+                        .write()
+                        .chora_supervisor
+                        .clear_worker("Browser route left or worker selection changed");
                 }
             }
         });
         use_window_event({
             let running = Rc::clone(&running);
+            let allowed_graph_origin = allowed_graph_origin.clone();
             move |event, _| {
                 if !matches!(event, WindowEvent::RedrawRequested) {
                     return;
@@ -1309,16 +1912,37 @@ mod traditional {
                             channel,
                             payload,
                         } => {
-                            let supported = channel
+                            let graph = channel == GRAPH_SNAPSHOT_CHANNEL;
+                            let graph_authority = if graph
+                                && !state.peek().blocks_live_qap_lease(
+                                    "Browser",
+                                    CapabilityLeaseScope::QualiaQ42Storage,
+                                )
+                                && !caller.private_browsing
+                                && payload == "{}"
+                                && allowed_graph_origin.as_deref() == Some(caller.origin.as_str())
+                            {
+                                try_consume_context::<AdoptedQualiaFoundation>().filter(|host| {
+                                    host.graph_grant()
+                                        .is_some_and(|grant| grant.grant.rights.read)
+                                })
+                            } else {
+                                None
+                            };
+                            let scalar_allowed = channel
                                 == HybridWebCapabilityChannel::GovernedVibeScriptEval
                                     .spec()
                                     .channel_id
+                                && !state.peek().blocks_live_qap_lease(
+                                    "Browser",
+                                    CapabilityLeaseScope::GovernedVibeScriptEval,
+                                )
                                 && !caller.private_browsing
                                 && !payload.is_empty()
                                 && payload.len() <= MAX_GOVERNED_VIBESCRIPT_CELL_BYTES
                                 && payload.bytes().all(|byte| (b' '..=b'~').contains(&byte))
                                 && session().is_some();
-                            if !supported {
+                            if graph_authority.is_none() && !scalar_allowed {
                                 let _ =
                                     owned
                                         .client
@@ -1328,9 +1952,12 @@ mod traditional {
                             let request = PendingScript {
                                 stamp: envelope.stamp,
                                 id,
-                                origin: caller.origin,
+                                origin: caller.origin.clone(),
                                 payload,
                                 expires_at: Instant::now() + Duration::from_secs(25),
+                                graph_caller: graph.then_some(caller),
+                                graph_authority,
+                                sequence: envelope.sequence,
                             };
                             if check_script_route(owned, &request, shell_mode, &address)
                                 .is_err_and(|error| error != ReplyError::Busy)
@@ -1340,7 +1967,8 @@ mod traditional {
                                     request.id,
                                     Err(ReplyError::Denied),
                                 );
-                            } else if pending_script.peek().is_some() {
+                            } else if pending_script.peek().is_some() || owned.graph_read.is_some()
+                            {
                                 let _ = owned.client.reply(
                                     request.stamp,
                                     request.id,
@@ -1358,6 +1986,39 @@ mod traditional {
                             if cancelled {
                                 pending_script.set(None);
                             }
+                            if owned.graph_read.as_ref().is_some_and(|active| {
+                                active.request.id == id && active.request.stamp == envelope.stamp
+                            }) {
+                                owned.graph_read = None;
+                            }
+                        }
+                        Control::Invalidate { .. } => {
+                            let previous = owned.observed_stamp;
+                            let reason = if owned.manual_reload_generation
+                                == Some(envelope.stamp.generation)
+                            {
+                                owned.manual_reload_generation = None;
+                                "Manual route invalidation / worker acknowledgement"
+                            } else if previous
+                                .is_some_and(|stamp| stamp.viewport != envelope.stamp.viewport)
+                            {
+                                "Worker acknowledged viewport resize"
+                            } else if previous
+                                .is_some_and(|stamp| stamp.generation != envelope.stamp.generation)
+                            {
+                                "Worker acknowledged navigation"
+                            } else {
+                                "Worker acknowledged route invalidation"
+                            };
+                            state
+                                .write()
+                                .chora_supervisor
+                                .invalidate_route(envelope.stamp.view, reason);
+                            owned.observed_stamp = Some(envelope.stamp);
+                            owned.last_published = None;
+                            owned.graph_read = None;
+                            pending_script.set(None);
+                            script_notice.set(None);
                         }
                         Control::Failed { reason } => {
                             terminal_status = Some(format!("Worker stopped: {reason:?}"));
@@ -1382,6 +2043,8 @@ mod traditional {
                     drop(guard);
                     widget_attr.set(None);
                     pending_script.set(None);
+                    state.write().chora_supervisor.clear_worker(&message);
+                    route_detail.set(String::new());
                     status.set(message);
                     return;
                 }
@@ -1394,17 +2057,37 @@ mod traditional {
                         Ok(address) => match owned.client.navigate(address.clone()) {
                             Ok(_) => {
                                 owned.sent_address = Some(address);
+                                owned.manual_reload_generation = None;
+                                owned.graph_read = None;
+                                pending_script.set(None);
+                                script_notice.set(None);
                                 Some(String::from("Browser request sent to copied-frame worker"))
                             }
                             Err(ProtocolError::Busy) => None,
                             Err(error) => Some(format!("Worker navigation failed: {error}")),
                         },
                     };
-                    drop(guard);
                     if let Some(next) = next {
                         if *status.peek() != next {
                             status.set(next);
                         }
+                    }
+                }
+                if let Some(notice) = poll_graph_read(owned, shell_mode, &address) {
+                    script_notice.set(Some(notice));
+                }
+                if let Some(stamp) = refresh_worker_supervisor(
+                    state,
+                    owned,
+                    &status.peek(),
+                    pending_script.peek().is_some(),
+                ) {
+                    let detail = format!(
+                        "{} · {} · {}",
+                        stamp.generation, stamp.document, stamp.viewport
+                    );
+                    if *route_detail.peek() != detail {
+                        route_detail.set(detail);
                     }
                 }
             }
@@ -1414,14 +2097,43 @@ mod traditional {
         let on_stop = Rc::clone(&running);
         let approve_worker = Rc::clone(&running);
         let deny_worker = Rc::clone(&running);
+        let invalidate_worker = Rc::clone(&running);
+        let invalidate_window = Arc::clone(&window);
         let requested_script = pending_script.read().clone();
         let start_window = Arc::clone(&window);
         let start_path = slot.clone();
         let object_attr = widget_attr.read().clone();
+        let can_invalidate = state.read().chora_supervisor.view_id != 0 && object_attr.is_some();
+        let route_detail_text = route_detail.read().clone();
         rsx! {
             section {
                 class: "browser-worker-surface",
                 p { role: "status", "{status}" }
+                WorkerSupervisorPanel {
+                    state, mode, worker_slot: slot.clone(), inactive_reason: "", can_invalidate,
+                    route_detail: route_detail_text,
+                    oninvalidate: move |_| {
+                        let mut guard = invalidate_worker.borrow_mut();
+                        let Some(worker) = guard.as_mut() else { return; };
+                        let Some(address) = worker.sent_address.clone() else {
+                            script_notice.set(Some("The worker has no current page to invalidate.".into()));
+                            return;
+                        };
+                        match worker.client.navigate(address) {
+                            Ok(stamp) => {
+                                pending_script.set(None);
+                                script_notice.set(None);
+                                state.write().chora_supervisor.invalidate_route(stamp.view, "Manual route invalidation / navigation boundary");
+                                worker.observed_stamp = Some(stamp);
+                                worker.manual_reload_generation = Some(stamp.generation);
+                                worker.last_published = None;
+                                worker.graph_read = None;
+                                invalidate_window.request_redraw();
+                            }
+                            Err(error) => script_notice.set(Some(format!("Could not invalidate the worker route: {error}"))),
+                        }
+                    },
+                }
                 if let Some(attr) = object_attr {
                     if let Some(request) = requested_script {
                         {
@@ -1429,12 +2141,23 @@ mod traditional {
                             let payload = request.payload.clone();
                             let expected = request.id;
                             let stamp = request.stamp;
+                            let graph_request = request.graph_caller.is_some();
+                            let graph_context = request.graph_authority.as_ref()
+                                .and_then(|host| host.graph_grant())
+                                .map(|grant| grant.grant.context)
+                                .unwrap_or_default();
+                            let approval_label = if graph_request { "Share Snapshot Once" } else { "Evaluate Once" };
                             rsx! {
                                 section {
                                     class: "id-list",
-                                    h5 { "VibeScript page request from {origin}" }
-                                    p { "Allow one isolated scalar evaluation for this page." }
-                                    pre { "{payload}" }
+                                    if graph_request {
+                                        h5 { "Qualia graph snapshot request from {origin}" }
+                                        p { "Share one read of signed project graph context {graph_context} with this origin." }
+                                    } else {
+                                        h5 { "VibeScript page request from {origin}" }
+                                        p { "Allow one isolated scalar evaluation for this page." }
+                                        pre { "{payload}" }
+                                    }
                                     button {
                                         r#type: "button", class: "ribbon-btn",
                                         onclick: move |_| {
@@ -1442,8 +2165,8 @@ mod traditional {
                                                 request.id == expected && request.stamp == stamp
                                             }).cloned();
                                             let Some(request) = selected else { return; };
-                                            let guard = approve_worker.borrow();
-                                            let Some(worker) = guard.as_ref() else { return; };
+                                            let mut guard = approve_worker.borrow_mut();
+                                            let Some(worker) = guard.as_mut() else { return; };
                                             let shell = state.peek();
                                             match check_script_route(worker, &request, shell.browser_mode, &shell.browser_url) {
                                                 Ok(()) => pending_script.set(None),
@@ -1457,6 +2180,28 @@ mod traditional {
                                                     script_notice.set(Some(String::from("The original page request has expired.")));
                                                     return;
                                                 }
+                                            }
+                                            let scope = if request.graph_caller.is_some() {
+                                                CapabilityLeaseScope::QualiaQ42Storage
+                                            } else {
+                                                CapabilityLeaseScope::GovernedVibeScriptEval
+                                            };
+                                            if shell.blocks_live_qap_lease("Browser", scope) {
+                                                let _ = worker.client.reply(request.stamp, request.id, Err(ReplyError::Denied));
+                                                script_notice.set(Some("The Browser capability lease blocks this request.".into()));
+                                                return;
+                                            }
+                                            if request.graph_caller.is_some() {
+                                                let started = start_graph_read(worker, request.clone());
+                                                let note = match started {
+                                                    Ok(()) => "Reading the signed graph scope…".to_owned(),
+                                                    Err(error) => {
+                                                        let _ = worker.client.reply(request.stamp, request.id, Err(error));
+                                                        format!("Graph snapshot request refused: {error:?}")
+                                                    },
+                                                };
+                                                script_notice.set(Some(note));
+                                                return;
                                             }
                                             let Some(adopted) = session() else {
                                                 let _ = worker.client.reply(request.stamp, request.id, Err(ReplyError::Unavailable));
@@ -1484,7 +2229,7 @@ mod traditional {
                                             };
                                             script_notice.set(Some(notice));
                                         },
-                                        "Evaluate Once"
+                                        "{approval_label}"
                                     }
                                     button {
                                         r#type: "button", class: "ribbon-btn",
@@ -1521,6 +2266,8 @@ mod traditional {
                             widget_attr.set(None);
                             pending_script.set(None);
                             script_notice.set(None);
+                            state.write().chora_supervisor.clear_worker("Stopped by the shell");
+                            route_detail.set(String::new());
                             status.set(String::from("Worker stopped"));
                         },
                         "Stop Worker"
@@ -1539,7 +2286,12 @@ mod traditional {
                                 Ok(client) => {
                                     let id = NEXT_WORKER_WIDGET.fetch_add(1, Ordering::Relaxed);
                                     widget_attr.set(Some(CustomWidgetAttr::with_stable_id(id, ChoraFrameWidget::new(client.clone(), peniko::ImageAlphaType::Alpha))));
-                                    *on_start.borrow_mut() = Some(WorkerSession { client, sent_address: None });
+                                    *on_start.borrow_mut() = Some(WorkerSession { client, sent_address: None, observed_stamp: None, manual_reload_generation: None, last_published: None, graph_read: None });
+                                    let mut shell = state.write();
+                                    shell.chora_supervisor.clear_worker("New worker started");
+                                    shell.chora_supervisor.worker_binary_path = start_path.clone();
+                                    shell.chora_supervisor.worker_state_label = "Starting copied-frame worker".into();
+                                    drop(shell);
                                     status.set(String::from("Starting copied-frame worker"));
                                     start_window.request_redraw();
                                 }
@@ -1609,6 +2361,27 @@ use traditional::TrustedBrowserSurface;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn graph_snapshot_probe_separates_local_fixture_from_worker_grants() {
+        use aether_qualia_host::chora_protocol::{ReplyError, MAX_REPLY_BYTES};
+        assert_eq!(
+            graph_snapshot_probe(BrowserExecutionMode::TraditionalWeb),
+            Err(ReplyError::Denied)
+        );
+        assert_eq!(
+            graph_snapshot_probe(BrowserExecutionMode::QualiaNative),
+            Err(ReplyError::Denied)
+        );
+        let body = graph_snapshot_probe(BrowserExecutionMode::HybridAugmented).unwrap();
+        assert!(body.len() <= MAX_REPLY_BYTES);
+        let doc: serde_json::Value = serde_json::from_str(&body).unwrap();
+        let row = doc["quins"][0].as_array().unwrap();
+        assert_eq!(row.len(), 6);
+        assert!(row.iter().all(|lane| lane
+            .as_str()
+            .is_some_and(|word| word.parse::<u64>().is_ok())));
+    }
 
     #[test]
     fn uniform_is_two_lanes_and_caps_the_harmonic_and_raymarch_budgets() {

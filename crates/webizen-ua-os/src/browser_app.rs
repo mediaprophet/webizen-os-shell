@@ -31,13 +31,21 @@
 //!      SocialWebNet userspace-WireGuard + QDNF overlay mesh (`ports::QDNF` / `ports::CHAT`) and X25519
 //!      envelope keys without any centralized platform server.
 
-use crate::identifiers::{issue_for_requestor, q_hash_60, Ask, IdentifierSet, Requestor};
+use crate::holo_10d_specimen::{default_holo_specimen, resolve_holo_10d_specimen};
+use crate::host_stewardship::validate_human_centric_host_nomenclature;
+use crate::identifiers::{
+    issue_for_requestor, q_hash_60, Ask, IdentifierSet, Requestor, VC_ORIGIN_INTEGRITY_DISCLAIMER,
+};
+use crate::portability_qecp::{
+    inspect_qecp_envelope_json, inspect_solid_turtle, prepare_qecp_envelope,
+};
 use crate::qap_host::{load_install_registry, save_install_registry, UaOsHost};
-use crate::semantic_fs::SemanticFileSystem;
+use crate::semantic_fs::{extract_semantic_features, SemanticFileSystem};
 use crate::session::LoopbackHost;
 use serde::{Deserialize, Serialize};
 use sha3::{Digest, Sha3_256};
 use std::fs;
+use std::net::Ipv6Addr;
 use std::path::Path;
 use vibe::{Expr, ExprKind, Literal};
 use vibescript_abi::NQuin48;
@@ -47,6 +55,8 @@ pub const BROWSER_APP_DID: &str = "did:qualia:qap:browser";
 pub const BROWSER_GIT_DID: &str = "did:git:github.com/WebizenAI/webizen-browser";
 pub const BROWSER_SOCIAL_STORE_REL_PATH: &str = "wellfair/browser_social_graph.json";
 pub const MAX_GOVERNED_VIBESCRIPT_CELL_BYTES: usize = 256;
+const MAX_HYBRID_PAYLOAD_BYTES: usize = 8 * 1024;
+const MAX_HYBRID_ORIGIN_BYTES: usize = 512;
 
 /// The three execution modes of the Webizen Web Browser product.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -147,6 +157,25 @@ impl HybridWebCapabilityChannel {
         Self::GovernedVibeScriptEval,
     ];
 
+    /// Bounded local input for the native shell's explicit capability checks.
+    pub const fn local_test_payload(self) -> &'static str {
+        match self {
+            Self::ContextualDidHandle => r#"{"purpose":"route-scoped browser preview"}"#,
+            Self::Mount10dHoloEmbed => "qualia://specimens/chora-spatiotemporal-commons",
+            Self::ExtractRdfToSemanticFs => {
+                r#"<article typeof="EvidenceGraph">Solar microgrid and eucalyptus canopy.</article>"#
+            }
+            Self::VerifyQecpCredential => {
+                r#"{"document_title":"Public fixture","issuer_pairwise_did":"did:q42:context:browser-fixture","claim_summary":"Public context for a local inspection."}"#
+            }
+            Self::SolidDataboxSync => {
+                r#"<https://preview.invalid/public> <http://purl.org/dc/terms/title> "Public fixture" ."#
+            }
+            Self::CommonsContributionReceipt => r#"{"effort_minutes":25,"aud_minor_units":0}"#,
+            Self::GovernedVibeScriptEval => "= 21 + 21",
+        }
+    }
+
     pub const fn spec(self) -> HybridCapabilityChannelSpec {
         match self {
             Self::ContextualDidHandle => HybridCapabilityChannelSpec {
@@ -154,42 +183,42 @@ impl HybridWebCapabilityChannel {
                 title: "Origin-Scoped Contextual DID Handle (Master Collapse Refused)",
                 required_lease: "qualia.service.identifiers",
                 plane_guard: "SpatiotemporalHandle + Instrument (never NaturalAgent who-plane)",
-                description: "Issues a directional, origin-bound DID handle to a web page for authentication without ever exposing the person's root identity.",
+                description: "Previews a directional, origin-bound handle with the root identity withheld. Authentication requires a host grant.",
             },
             Self::Mount10dHoloEmbed => HybridCapabilityChannelSpec {
                 channel_id: "qualia.10d.mount_holo_embed",
                 title: "In-Page <qualia-10d> Holographic 10D v2 HOLO GPU Surface",
                 required_lease: "qualia.service.scheduler",
                 plane_guard: "Instrument (Etalon Native Vulkan raymarching lens)",
-                description: "Upgrades <qualia-10d src=\"...\"> tags inside a traditional web page into a hardware-accelerated Etalon 10D v2 HOLO (0x0306) viewport.",
+                description: "Decodes a host-selected HOLO specimen and verifies its projection bounds for an Etalon viewport.",
             },
             Self::ExtractRdfToSemanticFs => HybridCapabilityChannelSpec {
                 channel_id: "qualia.rdf.extract_to_semantic_fs",
                 title: "Web Page RDFa / JSON-LD / CML -> Semantic File-System Extractor",
                 required_lease: "qualia.service.networking",
                 plane_guard: "ClaimOpinion (bounded validity & provenance)",
-                description: "Extracts structured Linked Data, microdata, and CML concepts from a traditional web page into 48-byte NQuin48 edges in the Semantic Library.",
+                description: "Extracts semantic features from supplied page text or markup and computes 48-byte NQuin48 preview edges.",
             },
             Self::VerifyQecpCredential => HybridCapabilityChannelSpec {
                 channel_id: "qualia.qecp.verify_c2pa",
-                title: "In-Page QECP C2PA & ML-DSA-65 Verifiable Credential Inspector",
+                title: "QECP Claim & Local Envelope Integrity Inspector",
                 required_lease: "qualia.service.identifiers",
                 plane_guard: "ClaimOpinion (proves issuer origin & integrity, not claim truth)",
-                description: "Inspects C2PA JUMBF and 48-byte NQuin48 native credentials embedded in web-hosted PDFs and documents.",
+                description: "Checks supplied claim fields and local envelope integrity. Issuer and C2PA signature verification require separate evidence.",
             },
             Self::SolidDataboxSync => HybridCapabilityChannelSpec {
                 channel_id: "qualia.solid.pod_sync",
                 title: "W3C Solid / LDP Databox Bidirectional Turtle <-> NQuin48 Bridge",
                 required_lease: "qualia.service.communications",
                 plane_guard: "SpatiotemporalHandle + ClaimOpinion",
-                description: "Connects traditional W3C Solid Pods (e.g. web.civics.au) with local .q42 volumes across the lossless RDF Turtle translation boundary.",
+                description: "Checks supplied W3C Solid RDF Turtle and computes a local NQuin48 parity digest. A Pod connection requires independent authorization.",
             },
             Self::CommonsContributionReceipt => HybridCapabilityChannelSpec {
                 channel_id: "qualia.commons.contribution_receipt",
                 title: "Permissive Commons & 9-Stage Contribution Web Bridge",
                 required_lease: "qualia.service.permissive_commons",
                 plane_guard: "ClaimOpinion + Instrument (agent/page proposes; human signs)",
-                description: "Allows civics and cooperative project sites (e.g. dev.civics.au) to propose effort/resource contribution receipts for explicit human ratification.",
+                description: "Validates a page's proposed minutes and AUD minor units for explicit human ratification.",
             },
             Self::GovernedVibeScriptEval => HybridCapabilityChannelSpec {
                 channel_id: "vibescript-eval",
@@ -763,8 +792,73 @@ pub struct HybridBridgeReceipt {
     pub sealed_nquin_parity: u64,
 }
 
-/// Produce the host's local capability preview. The native worker bridge must
-/// validate its own route and authorization before calling this function.
+/// Read-only diagnostics from the native host's current worker route. The copied
+/// frame transport validates the complete stamp before updating these counters.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChoraWorkerSupervisorSnapshot {
+    pub worker_binary_path: String,
+    pub worker_state_label: String,
+    pub session_id: u64,
+    pub view_id: u64,
+    pub frame_seq: u64,
+    pub registered_routes: usize,
+    pub pending_page_requests: usize,
+    pub forwarded_pointer_events: u64,
+    pub forwarded_wheel_events: u64,
+    pub forwarded_key_events: u64,
+    pub forwarded_ime_events: u64,
+    pub focus_active: bool,
+    pub last_route_invalidation_reason: String,
+}
+
+impl ChoraWorkerSupervisorSnapshot {
+    /// Begin reporting a newly adopted session and view.
+    pub fn connect(&mut self, session_id: u64, view_id: u64) {
+        *self = Self {
+            worker_binary_path: std::mem::take(&mut self.worker_binary_path),
+            worker_state_label: "Worker connected".into(),
+            session_id,
+            view_id,
+            ..Self::default()
+        };
+    }
+
+    /// Record a transport-verified frame that belongs to the current view.
+    pub fn observe_frame(&mut self, session_id: u64, view_id: u64, frame_seq: u64) -> bool {
+        if self.session_id == 0
+            || self.session_id != session_id
+            || self.view_id != view_id
+            || frame_seq <= self.frame_seq
+        {
+            return false;
+        }
+        self.frame_seq = frame_seq;
+        true
+    }
+
+    /// Clear invalidated route state while retaining the session's input counts.
+    pub fn invalidate_route(&mut self, next_view_id: u64, reason: impl Into<String>) {
+        self.view_id = next_view_id;
+        self.frame_seq = 0;
+        self.registered_routes = 0;
+        self.pending_page_requests = 0;
+        self.focus_active = false;
+        self.last_route_invalidation_reason = reason.into();
+    }
+
+    /// Drop the worker scope so that no further frames can update its telemetry.
+    pub fn clear_worker(&mut self, reason: impl Into<String>) {
+        *self = Self {
+            worker_binary_path: std::mem::take(&mut self.worker_binary_path),
+            worker_state_label: "Worker disconnected".into(),
+            last_route_invalidation_reason: reason.into(),
+            ..Self::default()
+        };
+    }
+}
+
+/// Execute a bounded local capability check without accessing session storage.
+/// Live worker requests require separate authorization and route validation.
 pub fn evaluate_hybrid_page_request(
     mode: BrowserExecutionMode,
     identifiers: &IdentifierSet,
@@ -772,76 +866,277 @@ pub fn evaluate_hybrid_page_request(
     channel: HybridWebCapabilityChannel,
     payload: &str,
 ) -> HybridBridgeReceipt {
-    let spec = channel.spec();
+    evaluate_local_capability(mode, identifiers, None, caller_origin, channel, payload)
+}
 
+/// Check an explicitly selected local capability from native shell UI.
+/// The storage argument is supplied by the host and never by a web page.
+pub fn evaluate_hybrid_page_request_in_storage(
+    mode: BrowserExecutionMode,
+    identifiers: &IdentifierSet,
+    storage: &Path,
+    caller_origin: &str,
+    channel: HybridWebCapabilityChannel,
+    payload: &str,
+) -> HybridBridgeReceipt {
+    evaluate_local_capability(
+        mode,
+        identifiers,
+        Some(storage),
+        caller_origin,
+        channel,
+        payload,
+    )
+}
+
+fn evaluate_local_capability(
+    mode: BrowserExecutionMode,
+    identifiers: &IdentifierSet,
+    storage: Option<&Path>,
+    caller_origin: &str,
+    channel: HybridWebCapabilityChannel,
+    payload: &str,
+) -> HybridBridgeReceipt {
+    let channel_id = channel.spec().channel_id;
+    let origin = hybrid_https_origin(caller_origin);
+    let receipt_origin = origin.as_deref().unwrap_or("invalid-origin");
     if mode != BrowserExecutionMode::HybridAugmented {
         return seal_hybrid_bridge_reply(
             mode,
-            caller_origin,
-            spec.channel_id,
+            receipt_origin,
+            channel_id,
             false,
             "ReplyError::Denied · Page capability previews require Mode 3 (Hybrid Augmented)."
                 .into(),
         );
     }
 
-    let reply_payload = match channel {
+    let reply = match origin.as_deref() {
+        None => Err("A valid HTTPS origin is required.".into()),
+        Some(_) if payload.len() > MAX_HYBRID_PAYLOAD_BYTES => {
+            Err("The capability input exceeds the local preview limit.".into())
+        }
+        Some(origin) => inspect_local_capability(identifiers, storage, origin, channel, payload),
+    };
+    let (permitted, reply_payload) = match reply {
+        Ok(result) => (true, result),
+        Err(reason) => (false, format!("ReplyError::Denied · {reason}")),
+    };
+    seal_hybrid_bridge_reply(mode, receipt_origin, channel_id, permitted, reply_payload)
+}
+
+/// Normalize the HTTPS scheme, authority, and port for local route diagnostics.
+/// The worker still supplies its independently verified origin and full route stamp.
+pub fn hybrid_https_origin(address: &str) -> Option<String> {
+    if address.len() > MAX_HYBRID_ORIGIN_BYTES
+        || address.contains('\\')
+        || address
+            .chars()
+            .any(|ch| ch.is_control() || ch.is_whitespace())
+    {
+        return None;
+    }
+    let (scheme, address) = address.split_once("://")?;
+    if !scheme.eq_ignore_ascii_case("https") {
+        return None;
+    }
+    let authority = address.split(['/', '?', '#']).next()?;
+    let (host, port) = if let Some(address) = authority.strip_prefix('[') {
+        let (ipv6, tail) = address.split_once(']')?;
+        let ip = ipv6.parse::<Ipv6Addr>().ok()?;
+        let port = if tail.is_empty() {
+            None
+        } else {
+            Some(tail.strip_prefix(':')?)
+        };
+        (format!("[{ip}]"), port)
+    } else {
+        let (host, port) = match authority.split_once(':') {
+            Some((host, port)) => (host, Some(port)),
+            None => (authority, None),
+        };
+        if host.len() > 253 || !host.split('.').all(valid_origin_label) {
+            return None;
+        }
+        (host.to_ascii_lowercase(), port)
+    };
+
+    match port {
+        None => Some(format!("https://{host}")),
+        Some(text) if !text.is_empty() && text.bytes().all(|ch| ch.is_ascii_digit()) => {
+            match text.parse::<u16>().ok()? {
+                0 => None,
+                443 => Some(format!("https://{host}")),
+                port => Some(format!("https://{host}:{port}")),
+            }
+        }
+        Some(_) => None,
+    }
+}
+
+fn valid_origin_label(label: &str) -> bool {
+    !label.is_empty()
+        && label.len() <= 63
+        && !label.starts_with('-')
+        && !label.ends_with('-')
+        && label
+            .bytes()
+            .all(|ch| ch.is_ascii_alphanumeric() || ch == b'-')
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ContextualHandleRequest {
+    #[serde(default)]
+    purpose: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct QecpPreviewClaim {
+    document_title: String,
+    issuer_pairwise_did: String,
+    claim_summary: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ContributionProposal {
+    effort_minutes: u32,
+    aud_minor_units: u64,
+}
+
+fn inspect_local_capability(
+    identifiers: &IdentifierSet,
+    storage: Option<&Path>,
+    origin: &str,
+    channel: HybridWebCapabilityChannel,
+    payload: &str,
+) -> Result<String, String> {
+    match channel {
         HybridWebCapabilityChannel::ContextualDidHandle => {
+            let request = serde_json::from_str::<ContextualHandleRequest>(payload)
+                .map_err(|_| "Expected a contextual handle request with an optional purpose.")?;
+            let (ask, context) = match request.purpose {
+                Some(purpose) => {
+                    let purpose = purpose.trim();
+                    if purpose.is_empty()
+                        || purpose.len() > 256
+                        || purpose.chars().any(char::is_control)
+                    {
+                        return Err("Provide a bounded, nonempty context purpose.".into());
+                    }
+                    validate_human_centric_host_nomenclature(purpose)?;
+                    (
+                        Ask::Purpose,
+                        format!("web-origin:{origin}|purpose:{purpose}"),
+                    )
+                }
+                None => (Ask::Unspecified, format!("web-origin:{origin}")),
+            };
             let reply = issue_for_requestor(
                 identifiers,
                 &Requestor {
-                    ask: Ask::Master,
-                    requestor: caller_origin.to_string(),
-                    context: format!("web-origin:{caller_origin}"),
+                    ask,
+                    requestor: origin.to_owned(),
+                    context,
                 },
             );
-            format!(
-                "PageReply::Ok · Issued origin-scoped handle {} (master ask refused={} · context={})",
-                reply.issued_did, reply.refused_master, reply.bound_context
-            )
+            let restriction = if reply.refused_master {
+                "master ask refused=true"
+            } else {
+                "master handles unavailable"
+            };
+            Ok(format!(
+                "Local handle preview · {} · {restriction} · issuance parity {:016x}. Authentication requires a separate host grant.",
+                reply.issued_did, reply.quin_parity
+            ))
         }
         HybridWebCapabilityChannel::Mount10dHoloEmbed => {
-            format!(
-                "Capability preview · Request to mount an Etalon 10D v2 HOLO surface for {payload} from {caller_origin}"
-            )
+            let specimen = match storage {
+                Some(storage) => resolve_holo_10d_specimen(storage, payload)?,
+                None => default_holo_specimen(payload)
+                    .ok_or("Choose a registered public specimen for this storage-free check.")?,
+            };
+            Ok(format!(
+                "Local HOLO (0x0306) verification · {} · AABB {:?} to {:?} · raymarch limit {} · SHA3-256 {} · parity {:016x}.",
+                specimen.specimen_id, specimen.proxy_aabb_min, specimen.proxy_aabb_max,
+                specimen.max_raymarch_steps, specimen.sha3_256_hex, specimen.sealed_nquin_parity
+            ))
         }
         HybridWebCapabilityChannel::ExtractRdfToSemanticFs => {
-            format!(
-                "Capability preview · Request to extract RDFa/JSON-LD/CML from {caller_origin} ({payload}) into the Semantic File-System"
-            )
+            if payload.trim().is_empty() {
+                return Err("Provide embedded page text or RDF markup.".into());
+            }
+            let (topics, entities, signals) =
+                extract_semantic_features(origin, "text/html", payload);
+            let records = [
+                ("https://webizen.org/q42#previewTopic", topics.as_slice()),
+                (
+                    "https://webizen.org/q42#previewDepicts",
+                    entities.as_slice(),
+                ),
+                ("https://webizen.org/q42#previewSignal", signals.as_slice()),
+            ];
+            let parity = records
+                .into_iter()
+                .flat_map(|(predicate, values)| {
+                    values.iter().map(move |value| {
+                        NQuin48::invariant(origin, predicate, q_hash_60(value)).parity()
+                    })
+                })
+                .fold(0, |digest, parity| digest ^ parity);
+            Ok(format!(
+                "Local extraction · {} topics, {} entities, {} CML signals · NQuin48 parity digest {parity:016x}.",
+                topics.len(), entities.len(), signals.len()
+            ))
         }
         HybridWebCapabilityChannel::VerifyQecpCredential => {
-            format!(
-                "Capability preview · Request to inspect C2PA JUMBF QECP and issuer integrity for {payload}"
-            )
+            let (envelope, evidence) =
+                if let Ok(claim) = serde_json::from_str::<QecpPreviewClaim>(payload) {
+                    (
+                        prepare_qecp_envelope(
+                            &claim.document_title,
+                            &claim.issuer_pairwise_did,
+                            &claim.claim_summary,
+                        )?,
+                        "Unsigned claim preview",
+                    )
+                } else {
+                    (
+                        inspect_qecp_envelope_json(payload)?,
+                        "Local envelope integrity verified",
+                    )
+                };
+            Ok(format!(
+                "{evidence} · {} · NQuin48 parity {:016x} · Awaiting external issuer verifier. {}",
+                envelope.credential_id,
+                envelope.sealed_nquin_parity,
+                VC_ORIGIN_INTEGRITY_DISCLAIMER
+            ))
         }
         HybridWebCapabilityChannel::SolidDataboxSync => {
-            format!(
-                "Capability preview · Request to sync a Solid LDP resource at {caller_origin} ({payload})"
-            )
+            let (triple_count, parity) = inspect_solid_turtle(payload)?;
+            Ok(format!(
+                "Local Solid Turtle translation · {triple_count} triples · NQuin48 parity digest {parity:016x}."
+            ))
         }
         HybridWebCapabilityChannel::CommonsContributionReceipt => {
-            format!(
-                "Capability preview · Proposed Permissive Commons contribution from {caller_origin} ({payload}) awaiting human ratification"
-            )
+            let proposal = serde_json::from_str::<ContributionProposal>(payload).map_err(|_| {
+                "Provide whole effort_minutes and aud_minor_units in a contribution proposal."
+            })?;
+            if proposal.effort_minutes == 0 && proposal.aud_minor_units == 0 {
+                return Err("A contribution proposal needs effort or a nonzero amount.".into());
+            }
+            Ok(format!(
+                "Unratified contribution proposal · {} effort minutes · {} AUD minor units · Awaiting explicit human KeyVault signature.",
+                proposal.effort_minutes, proposal.aud_minor_units
+            ))
         }
         HybridWebCapabilityChannel::GovernedVibeScriptEval => {
-            match governed_vibescript_preview(payload) {
-                Ok(result) => result,
-                Err(reason) => {
-                    return seal_hybrid_bridge_reply(
-                        mode,
-                        caller_origin,
-                        spec.channel_id,
-                        false,
-                        format!("VibeScript preview unavailable · {reason}"),
-                    );
-                }
-            }
+            governed_vibescript_preview(payload).map_err(str::to_owned)
         }
-    };
-
-    seal_hybrid_bridge_reply(mode, caller_origin, spec.channel_id, true, reply_payload)
+    }
 }
 
 fn seal_hybrid_bridge_reply(
@@ -961,6 +1256,169 @@ mod tests {
     use crate::os_env::OsEnvironment;
     use crate::qap_host::{seed_bundled_qaps, TrustRoots};
     use crate::session::Sku;
+
+    #[test]
+    fn evaluates_all_seven_hybrid_capability_channels_and_denies_mode1() {
+        let identifiers = IdentifierSet {
+            fabric_did: "did:qi:test-fabric".into(),
+            records: Vec::new(),
+            bindings: Vec::new(),
+            validation: crate::identifiers::IdentityValidation::Underdetermined {
+                distinct: 0,
+                attested: 0,
+            },
+            quins: Vec::new(),
+            turtle_path: Default::default(),
+            validation_summary: String::new(),
+        };
+        let origin = "https://preview.invalid";
+        let checks = [
+            (
+                HybridWebCapabilityChannel::ContextualDidHandle,
+                "did:q42:context:",
+            ),
+            (HybridWebCapabilityChannel::Mount10dHoloEmbed, "AABB"),
+            (HybridWebCapabilityChannel::ExtractRdfToSemanticFs, "topics"),
+            (
+                HybridWebCapabilityChannel::VerifyQecpCredential,
+                "Awaiting external issuer verifier",
+            ),
+            (HybridWebCapabilityChannel::SolidDataboxSync, "1 triples"),
+            (
+                HybridWebCapabilityChannel::CommonsContributionReceipt,
+                "Unratified contribution proposal",
+            ),
+            (
+                HybridWebCapabilityChannel::GovernedVibeScriptEval,
+                "VibeScript result: 42",
+            ),
+        ];
+
+        for (channel, expected) in checks {
+            let preview = |mode| {
+                evaluate_hybrid_page_request(
+                    mode,
+                    &identifiers,
+                    origin,
+                    channel,
+                    channel.local_test_payload(),
+                )
+            };
+            let local = preview(BrowserExecutionMode::HybridAugmented);
+            assert!(local.permitted, "{channel:?}: {}", local.reply_payload);
+            assert!(
+                local.reply_payload.contains(expected),
+                "{}",
+                local.reply_payload
+            );
+            assert_eq!(local, preview(BrowserExecutionMode::HybridAugmented));
+            let parity =
+                NQuin48::invariant(origin, &local.channel_id, q_hash_60(&local.reply_payload));
+            assert!(parity.verify_parity());
+            assert_eq!(local.sealed_nquin_parity, parity.parity());
+            let denied = preview(BrowserExecutionMode::TraditionalWeb);
+            assert!(!denied.permitted);
+            assert!(denied.reply_payload.starts_with("ReplyError::Denied"));
+        }
+
+        let contextual = HybridWebCapabilityChannel::ContextualDidHandle;
+        let handle = |address| {
+            evaluate_hybrid_page_request(
+                BrowserExecutionMode::HybridAugmented,
+                &identifiers,
+                address,
+                contextual,
+                contextual.local_test_payload(),
+            )
+        };
+        let first = handle(origin);
+        assert_eq!(
+            first,
+            handle("HTTPS://PREVIEW.INVALID:443/inspection?source=local")
+        );
+        assert_ne!(
+            first.reply_payload,
+            handle("https://second.invalid").reply_payload
+        );
+        assert!(!first.reply_payload.contains("did:qi:test-fabric"));
+        assert!(!handle("https://preview.invalid@other.invalid").permitted);
+
+        for (channel, invalid) in [
+            (
+                HybridWebCapabilityChannel::ContextualDidHandle,
+                r#"{"purpose":" "}"#,
+            ),
+            (
+                HybridWebCapabilityChannel::Mount10dHoloEmbed,
+                "../private.10d",
+            ),
+            (HybridWebCapabilityChannel::ExtractRdfToSemanticFs, ""),
+            (
+                HybridWebCapabilityChannel::VerifyQecpCredential,
+                r#"{"signed":true}"#,
+            ),
+            (
+                HybridWebCapabilityChannel::SolidDataboxSync,
+                "not a Turtle triple",
+            ),
+            (
+                HybridWebCapabilityChannel::CommonsContributionReceipt,
+                r#"{"effort_minutes":-1,"aud_minor_units":0}"#,
+            ),
+        ] {
+            let rejected = evaluate_hybrid_page_request(
+                BrowserExecutionMode::HybridAugmented,
+                &identifiers,
+                origin,
+                channel,
+                invalid,
+            );
+            assert!(
+                !rejected.permitted,
+                "{channel:?}: {}",
+                rejected.reply_payload
+            );
+        }
+    }
+
+    #[test]
+    fn tracks_chora_worker_routestamp_and_invalidation_lifecycle() {
+        let mut supervisor = ChoraWorkerSupervisorSnapshot {
+            worker_binary_path: "www-engine-worker".into(),
+            ..ChoraWorkerSupervisorSnapshot::default()
+        };
+        assert!(!supervisor.observe_frame(15, 4, 1));
+
+        supervisor.connect(15, 4);
+        assert_eq!(supervisor.worker_binary_path, "www-engine-worker");
+        assert!(supervisor.observe_frame(15, 4, 1));
+        assert!(!supervisor.observe_frame(15, 4, 1));
+        assert!(!supervisor.observe_frame(15, 3, 2));
+        assert!(!supervisor.observe_frame(14, 4, 2));
+
+        supervisor.registered_routes = 1;
+        supervisor.pending_page_requests = 2;
+        supervisor.forwarded_pointer_events = 3;
+        supervisor.focus_active = true;
+        supervisor.invalidate_route(5, "Manual route invalidation");
+        assert_eq!(supervisor.frame_seq, 0);
+        assert_eq!(supervisor.registered_routes, 0);
+        assert_eq!(supervisor.pending_page_requests, 0);
+        assert_eq!(supervisor.forwarded_pointer_events, 3);
+        assert!(!supervisor.focus_active);
+        assert!(!supervisor.observe_frame(15, 4, 2));
+        assert!(supervisor.observe_frame(15, 5, 2));
+        assert_eq!(
+            supervisor.last_route_invalidation_reason,
+            "Manual route invalidation"
+        );
+
+        supervisor.clear_worker("Worker exited");
+        assert!(!supervisor.observe_frame(15, 5, 3));
+        assert_eq!(supervisor.worker_binary_path, "www-engine-worker");
+        assert_eq!(supervisor.last_route_invalidation_reason, "Worker exited");
+        assert_eq!(supervisor.forwarded_pointer_events, 0);
+    }
 
     #[test]
     fn governed_cell_preview_evaluates_only_bounded_pure_cells_in_hybrid_mode() {

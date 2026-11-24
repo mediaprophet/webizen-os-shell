@@ -29,6 +29,11 @@ pub fn HaloBar(mut state: Signal<ShellState>) -> Element {
     let os_user = s.os_username.clone();
     let spatial = s.spatial_mode;
     let launcher_open = s.launcher_open;
+    let control_center_open = s.control_center_drawer_open;
+    let pending_notices = s.os_control_center.notification_count();
+    let active_jobs = s.os_control_center.active_job_count();
+    let control_center_label =
+        format!("OS notifications and jobs: {pending_notices} unread, {active_jobs} active jobs");
     let active_care_alerts = s
         .host_stewardship
         .care_alerts
@@ -59,6 +64,21 @@ pub fn HaloBar(mut state: Signal<ShellState>) -> Element {
                 onclick: move |_| state.write().launcher_open = true,
                 span { class: "orb", aria_hidden: "true", "◉" }
                 span { class: "label", "Commands" }
+            }
+            button {
+                r#type: "button",
+                class: "fav os-control-center-launch",
+                title: "{control_center_label}",
+                aria_label: "{control_center_label}",
+                aria_expanded: if control_center_open { "true" } else { "false" },
+                aria_controls: "os-control-center-drawer",
+                onclick: move |_| {
+                    let mut shell = state.write();
+                    shell.control_center_drawer_open = !shell.control_center_drawer_open;
+                },
+                span { class: "orb", aria_hidden: "true", "🔔" }
+                span { class: "label", "OS Notifications & Jobs" }
+                span { class: "label", "{pending_notices} unread · {active_jobs} jobs" }
             }
             h2 { "Humans" }
             for (name, stage_item, glyph) in HUMAN.iter() {

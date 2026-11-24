@@ -1,3 +1,6 @@
+mod qualia_admission;
+
+use self::qualia_admission::QualiaAdmissionPanel;
 use crate::components::auxiliary_windows::{
     apply_shell_command, jump_to_stage, AuxShellCommand, AuxWindowBridge, CareResponseAuthority,
 };
@@ -11,6 +14,8 @@ use aether_native::winit::{
     event::{ElementState, WindowEvent},
     keyboard::{Key, ModifiersState},
 };
+use aether_native::{AetherNativeWindowRenderer, RendererFallbackPolicy};
+use aether_qualia_host::{prelude::QualiaHostContext, NativeAuthoringBridge};
 use serde_json::Value;
 use std::{
     cell::{Cell, RefCell},
@@ -18,12 +23,15 @@ use std::{
     io::Read,
     path::PathBuf,
     rc::Rc,
-    sync::atomic::{AtomicUsize, Ordering},
+    sync::{
+        atomic::{AtomicBool, AtomicUsize, Ordering},
+        Arc,
+    },
     time::{SystemTime, UNIX_EPOCH},
 };
 use webizen_ua_os::{
-    validate_human_centric_host_nomenclature, verify_detached_ed25519,
-    DispatchedCareAndGuardianAlert,
+    validate_human_centric_host_nomenclature, verify_detached_ed25519, AdoptedQualiaFoundation,
+    DispatchedCareAndGuardianAlert, OsJobRunner,
 };
 
 static C1_SMOKE_REDRAWS: AtomicUsize = AtomicUsize::new(0);
@@ -281,11 +289,144 @@ fn arm_c1_smoke() {
     });
 }
 
+fn arm_background_jobs(mut state: Signal<ShellState>) {
+    let window = aether_native::use_window();
+    let (runner, pending_refresh) = use_hook(move || {
+        let pending_refresh = Arc::new(AtomicBool::new(true));
+        let runner = session()
+            .filter(|_| state.peek().os_control_center_error.is_none())
+            .and_then(|session| {
+                let changed = Arc::clone(&pending_refresh);
+                let wake_window = window.clone();
+                match OsJobRunner::new(session, move || {
+                    changed.store(true, Ordering::Release);
+                    wake_window.request_redraw();
+                }) {
+                    Ok(runner) => {
+                        window.request_redraw();
+                        Some(provide_context(runner))
+                    }
+                    Err(error) => {
+                        state.write().os_job_runner_error = Some(error);
+                        None
+                    }
+                }
+            });
+        (runner, pending_refresh)
+    });
+
+    aether_native::use_window_event(move |event, _| {
+        if !matches!(event, WindowEvent::RedrawRequested)
+            || !pending_refresh.swap(false, Ordering::AcqRel)
+        {
+            return;
+        }
+        let Some(runner) = runner.as_ref() else {
+            return;
+        };
+        let mut current = state.peek().os_control_center.clone();
+        match runner.refresh(&mut current) {
+            Ok(changed) => {
+                if changed || state.peek().os_job_runner_error.is_some() {
+                    let mut shell = state.write();
+                    current.sync_notifications_from_stewardship(&shell.host_stewardship);
+                    shell.os_control_center = current;
+                    shell.os_job_runner_error = None;
+                }
+            }
+            Err(error) => {
+                pending_refresh.store(true, Ordering::Release);
+                let is_new = state.peek().os_job_runner_error.as_deref() != Some(error.as_str());
+                if is_new {
+                    state.write().os_job_runner_error = Some(error);
+                }
+            }
+        }
+    });
+}
+
+fn arm_renderer_health(mut state: Signal<ShellState>) {
+    let renderer = try_consume_context::<AetherNativeWindowRenderer>();
+    let window = aether_native::use_window();
+    aether_native::use_window_event(move |event, _| {
+        if !matches!(
+            event,
+            WindowEvent::RedrawRequested | WindowEvent::SurfaceResized(_)
+        ) {
+            return;
+        }
+        let Some(renderer) = renderer.as_ref() else {
+            return;
+        };
+        let health = renderer.health();
+        let physical_size = window.surface_size();
+        let dimensions = (physical_size.width, physical_size.height);
+        let fallback_engaged = renderer.fallback_engaged();
+        let policy = match renderer.fallback_policy() {
+            RendererFallbackPolicy::CpuOnFailure if cfg!(feature = "gpu-cpu-fallback") => {
+                "CPU on GPU failure"
+            }
+            RendererFallbackPolicy::CpuOnFailure => "CPU fallback is disabled in this build",
+            RendererFallbackPolicy::FailClosed => "Stop painting on renderer fault",
+        };
+        let backend = if fallback_engaged {
+            format!("{} · software fallback", health.backend_name)
+        } else if health.faulted {
+            format!("{} · renderer fault", health.backend_name)
+        } else if health.gpu_active {
+            format!("{} · GPU active", health.backend_name)
+        } else {
+            health.backend_name.to_owned()
+        };
+        let changed = {
+            let current = &state.peek().renderer_health;
+            current.backend_label != backend
+                || current.fallback_policy_label != policy
+                || current.fallback_engaged != fallback_engaged
+                || current.viewport_dimensions != dimensions
+        };
+        if changed {
+            let mut shell = state.write();
+            shell.renderer_health.backend_label = backend;
+            shell.renderer_health.fallback_policy_label = policy.into();
+            shell.renderer_health.fallback_engaged = fallback_engaged;
+            shell.renderer_health.viewport_dimensions = dimensions;
+        }
+    });
+}
+
+#[component]
+fn QualiaBackedStage(
+    state: Signal<ShellState>,
+    adopted: Signal<Option<AdoptedQualiaFoundation>>,
+) -> Element {
+    let scope = use_hook(|| {
+        adopted.peek().clone().map(|foundation| {
+            let mut context = QualiaHostContext::new(foundation.authority().clone());
+            context.authoring = NativeAuthoringBridge::connect(
+                context.authority.clone(),
+                foundation.session().clone(),
+            )
+            .ok();
+            (foundation, context)
+        })
+    });
+    if let Some((foundation, context)) = scope {
+        provide_context(foundation);
+        provide_context(context);
+    }
+    rsx! { StageHost { state } }
+}
+
 #[component]
 pub fn App() -> Element {
     let mut state = use_signal(ShellState::default);
     arm_c1_smoke();
     arm_omni_shortcut(state);
+    arm_renderer_health(state);
+    arm_background_jobs(state);
+    let adopted = use_signal(|| None::<AdoptedQualiaFoundation>);
+    let has_adopted_scope = adopted.read().is_some();
     let refract_store = use_refract_store(|| {
         session()
             .map(WebizenRefractModel::from_session)
@@ -310,6 +451,11 @@ pub fn App() -> Element {
             if *previous_fabric != snapshot.host_stewardship {
                 refresh_refract_host_records(&refract_store, &snapshot.host_stewardship);
                 *previous_fabric = snapshot.host_stewardship.clone();
+                drop(snapshot);
+                state
+                    .write()
+                    .os_control_center
+                    .sync_notifications_from_stewardship(&previous_fabric);
             }
         }
     });
@@ -347,7 +493,11 @@ pub fn App() -> Element {
 
             HaloBar { state }
 
-            StageHost { state }
+            if has_adopted_scope {
+                QualiaBackedStage { state, adopted }
+            } else {
+                StageHost { state }
+            }
 
             footer {
                 class: "footer",
@@ -365,6 +515,7 @@ pub fn App() -> Element {
                     "Launch…"
                 }
                 span { id: "active-label", "{active}" }
+                QualiaAdmissionPanel { adopted }
             }
         }
         if launcher_open {
