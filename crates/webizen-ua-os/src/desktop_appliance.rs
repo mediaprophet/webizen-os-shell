@@ -198,6 +198,7 @@ mod tests {
             ram_bytes: None,
             cpu_count: None,
             cpu_brand: None,
+            wsl2_mode: crate::Wsl2CompatibilityMode::NativeLinuxPrimaryOs,
         };
 
         let mut profile = build_desktop_appliance_profile(Sku::Appliance, &env, &fabric);

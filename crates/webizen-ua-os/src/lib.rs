@@ -132,7 +132,10 @@ pub use native_gpu::{
     probe_native_etalon, probe_native_vibe_providers, NativeEtalonStatus, NativeGpuAdapterInfo,
     NODE_PROFILE_FILE_NAME,
 };
-pub use os_env::OsEnvironment;
+pub use os_env::{
+    probe_wsl2_compatibility_mode, OsEnvironment, Wsl2BridgeAndPrimaryOsPortabilityPlan,
+    Wsl2CompatibilityMode,
+};
 pub use os_job_runner::{OsJobInput, OsJobRunner};
 pub use os_jobs_leases::{
     CapabilityLeaseScope, OsControlCenterState, OsJobKind, OsJobRecord, OsJobStatus,
@@ -175,9 +178,16 @@ pub use qualia_host_foundation::{
     VibeExecutionReceiptSummary,
 };
 pub use sanctuary_onboarding::{
-    build_sanctuary_onboarding_state, pair_and_test_pocket_cosigner,
-    simulate_shamir_recovery_ceremony, PocketCosignerPairingState, SanctuaryOnboardingState,
-    SanctuaryVaultSlotSpec, ShamirGuardianShareHolder,
+    build_sanctuary_onboarding_state, build_seeded_civics_au_human_rights_observatory,
+    build_seeded_machine_onboarding_and_account_assignments, evaluate_onboarding_confidence_tier,
+    mint_zero_identity_verifiable_truthfulness_proof, pair_and_test_pocket_cosigner,
+    simulate_shamir_recovery_ceremony, AnonymisedVerifiableConstituentTestimony,
+    AustralianCivicsJurisdiction, CivicsAuAnonymisedStatisticalSeries,
+    CivicsAuHumanRightsObservatory, HumanRightsCivicsIssueDomain, MachineAccountSeatAssignment,
+    MachineLocalAccountAssignmentKind, MachineOnboardingAndAccountAssignmentRegistry,
+    MachinePrincipalConfidenceTier, NewUserOnboardingScreenStep,
+    ParliamentaryConstituentEngagementThread, PocketCosignerPairingState, SanctuaryOnboardingState,
+    SanctuaryVaultSlotSpec, ShamirGuardianShareHolder, ZeroIdentityVerifiableTruthfulnessProof,
 };
 pub use semantic_fs::{
     build_entry_nquins, extract_semantic_features, recommend_toolboxes_for_entry,
