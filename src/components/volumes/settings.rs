@@ -453,6 +453,7 @@ fn SettingsSectionBody(section: SettingsSection, mut state: Signal<ShellState>) 
                     dt { "Host Link" }
                     dd { "{host_link}" }
                 }
+                BranchingOrchestratorPanel { state }
                 OsJobQueue { state }
                 QapLeaseMatrix { state }
                 HostDaemonPanel { state }
@@ -975,10 +976,14 @@ fn update_qap_preference(
     allow: bool,
 ) -> String {
     let result = control_center_storage(state).and_then(|storage| {
-        state
-            .write()
+        let mut s = state.write();
+        let lease = s
             .os_control_center
-            .set_qap_lease(storage, package_id, scope, allow)
+            .set_qap_lease(storage, package_id, scope, allow)?;
+        let cc = s.os_control_center.clone();
+        s.orchestrator.rebalance_all_quotas(Some(&cc));
+        let _ = s.orchestrator.save(storage);
+        Ok(lease)
     });
     match result {
         Ok(lease) => format!("{} · {}", lease.scope.label(), lease.last_audit_note),
@@ -1196,6 +1201,173 @@ fn SettingsSolidExport(mut state: Signal<ShellState>) -> Element {
                 }
             }
             p { role: "status", "{status}" }
+        }
+    }
+}
+
+#[component]
+fn BranchingOrchestratorPanel(mut state: Signal<ShellState>) -> Element {
+    let s = state.read();
+    let orch = s.orchestrator.clone();
+    drop(s);
+
+    let tier_bps = orch.tier_budget_bps;
+    let notice = orch.last_orchestrator_notice.clone();
+    let branches = orch.branches.clone();
+    let dispatches = orch.elastic_dispatches.clone();
+    let parity = format!("{:#018x}", orch.sealed_nquin_parity);
+
+    rsx! {
+        section {
+            class: "id-list",
+            h4 { "Two-Level Branching OS & Per-App Thread Orchestrator (4 Environmental Tiers · {branches.len()} App Sub-Trees · NQuin48 {parity})" }
+            p {
+                class: "muted",
+                "Level 1 (Root Environmental Tiers) arbitrates hardware budgets across Safety/Real-Time (Tier 0), Focused Foreground App (Tier 1), Orbit Resident Apps (Tier 2), and Elastic Bulk/Offload Compute (Tier 3). Level 2 (Per-App Sub-Trees) lets each App/Qap reprioritize or pause its own child threads (P0..P3) within its branch without ever starving Tier 0 safety tasks or stealing environmental quota from sibling apps."
+            }
+            p {
+                "Root Tier Split: Tier 0 Safety = {f64::from(tier_bps[0]) / 100.0:.1}% · Tier 1 Foreground = {f64::from(tier_bps[1]) / 100.0:.1}% · Tier 2 Orbit Resident = {f64::from(tier_bps[2]) / 100.0:.1}% · Tier 3 Elastic Bulk = {f64::from(tier_bps[3]) / 100.0:.1}%"
+            }
+            if !notice.is_empty() {
+                p { class: "path", role: "status", "{notice}" }
+            }
+            div {
+                class: "plane-grid",
+                for branch in branches {
+                    {
+                        let bid = branch.branch_id.clone();
+                        let bid_focus = bid.clone();
+                        let b_title = branch.app_or_volume_title.clone();
+                        let b_tier = branch.assigned_tier.title();
+                        let b_pct = f64::from(branch.allocated_env_budget_bps) / 100.0;
+                        let b_weight = branch.branch_weight;
+                        let can_focus = !matches!(
+                            branch.assigned_tier,
+                            webizen_ua_os::EnvironmentalTier::Tier0SafetyAndRealTime
+                                | webizen_ua_os::EnvironmentalTier::Tier3EnvironmentalAndElasticCompute
+                        );
+                        let threads = branch.child_threads.clone();
+                        rsx! {
+                            div {
+                                key: "{bid}",
+                                class: "plane-card",
+                                h5 { "{b_title} ({b_pct:.1}% OS Share · Weight {b_weight})" }
+                                p { "Environmental Tier: {b_tier}" }
+                                if can_focus {
+                                    button {
+                                        r#type: "button",
+                                        class: "sanctum-issue",
+                                        onclick: move |_| {
+                                            let storage = session().map(|sess| sess.host.storage.as_path());
+                                            let mut s = state.write();
+                                            let cc = s.os_control_center.clone();
+                                            let _ = s.orchestrator.focus_app_branch(
+                                                storage,
+                                                &bid_focus,
+                                                Some(&cc),
+                                            );
+                                        },
+                                        "Focus Branch into Tier 1 Foreground"
+                                    }
+                                }
+                                ul {
+                                    for t in threads {
+                                        {
+                                            let tid = t.thread_id.clone();
+                                            let tid_boost = tid.clone();
+                                            let tid_demote = tid.clone();
+                                            let tid_pause = tid.clone();
+                                            let bid_b = bid.clone();
+                                            let bid_d = bid.clone();
+                                            let bid_p = bid.clone();
+                                            let t_title = t.title.clone();
+                                            let t_prio = t.priority.label();
+                                            let t_state = t.state.label();
+                                            let t_share = f64::from(t.effective_global_share_bps) / 100.0;
+                                            let t_kib = t.sentinel_arena_budget_kib;
+                                            let t_target = t.execution_target.code();
+                                            rsx! {
+                                                li {
+                                                    key: "{tid}",
+                                                    div {
+                                                        strong { "[{t_state}] [{t_prio}] {t_title} " }
+                                                        span { "· Global Share: {t_share:.2}% · Arena: {t_kib} KiB · Locus: {t_target}" }
+                                                    }
+                                                    div {
+                                                        class: "orb-sectors",
+                                                        button {
+                                                            r#type: "button",
+                                                            class: "ribbon-btn",
+                                                            onclick: move |_| {
+                                                                let storage = session().map(|sess| sess.host.storage.as_path());
+                                                                let mut s = state.write();
+                                                                let cc = s.os_control_center.clone();
+                                                                let _ = s.orchestrator.reprioritize_app_child_thread(
+                                                                    storage,
+                                                                    &bid_b,
+                                                                    &tid_boost,
+                                                                    true,
+                                                                    Some(&cc),
+                                                                );
+                                                            },
+                                                            "Boost Priority"
+                                                        }
+                                                        button {
+                                                            r#type: "button",
+                                                            class: "ribbon-btn",
+                                                            onclick: move |_| {
+                                                                let storage = session().map(|sess| sess.host.storage.as_path());
+                                                                let mut s = state.write();
+                                                                let cc = s.os_control_center.clone();
+                                                                let _ = s.orchestrator.reprioritize_app_child_thread(
+                                                                    storage,
+                                                                    &bid_d,
+                                                                    &tid_demote,
+                                                                    false,
+                                                                    Some(&cc),
+                                                                );
+                                                            },
+                                                            "Demote Priority"
+                                                        }
+                                                        button {
+                                                            r#type: "button",
+                                                            class: "ribbon-btn",
+                                                            onclick: move |_| {
+                                                                let storage = session().map(|sess| sess.host.storage.as_path());
+                                                                let mut s = state.write();
+                                                                let cc = s.os_control_center.clone();
+                                                                let _ = s.orchestrator.toggle_app_child_thread_pause(
+                                                                    storage,
+                                                                    &bid_p,
+                                                                    &tid_pause,
+                                                                    Some(&cc),
+                                                                );
+                                                            },
+                                                            "Pause / Resume"
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if !dispatches.is_empty() {
+                h5 { "Elastic Compute & High-RAM .q42 Ontology Offload Dispatches ({dispatches.len()})" }
+                ul {
+                    for d in dispatches.iter().take(6) {
+                        li {
+                            key: "{d.dispatch_id}",
+                            strong { "{d.dispatch_id} · " }
+                            span { "{d.status_summary} ({d.colab_routine_or_host_endpoint})" }
+                        }
+                    }
+                }
+            }
         }
     }
 }

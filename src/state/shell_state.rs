@@ -12,15 +12,15 @@ use webizen_ua_os::{
     probe_mobile_avf_sanctuary, probe_only, q_hash_60, sync_fleet_from_fabric,
     AuthoringWorkflowSnapshot, BrowserExecutionMode, BrowserProductStatus, BrowserSocialGraph,
     CapabilityLeaseScope, ChoraWorkerSupervisorSnapshot, DesktopApplianceProfile, DeviceSession,
-    GovernedVibeActionReport, HoloShaderVisualizationMode, HostDaemonStatusSnapshot,
-    HybridBridgeReceipt, HypermediaProduceReceipt, IdentifierFabricPlane, LaunchPlan,
-    LlmAndAgentManagementRegistry, LocalLlmModelEntry, LocalModelReadinessReceipt,
+    GovernedVibeActionReport, HierarchicalOrchestratorState, HoloShaderVisualizationMode,
+    HostDaemonStatusSnapshot, HybridBridgeReceipt, HypermediaProduceReceipt, IdentifierFabricPlane,
+    LaunchPlan, LlmAndAgentManagementRegistry, LocalLlmModelEntry, LocalModelReadinessReceipt,
     MobileAvfSanctuaryProfile, NativeGpuAdapterInfo, NaturalHostStewardshipFabric,
     OsControlCenterState, OsEnvironment, PersistedWorkspaceSnapshot, PoetCellEntry,
     PoetGazetteerResult, QappRegistryEntry, QecpCredentialEnvelope, SanctuaryOnboardingState,
     SemanticFacetFilter, SemanticFileSystem, SemanticToolboxId, ShamirQ42jBackupArchive,
     ShellRendererHealthSummary, Sku, SolidTurtleSyncReceipt, ThreeNodeMeshSimulationReceipt,
-    UaOsHost,
+    UaOsHost, WellfairSpecialistPortalState,
 };
 
 static SESSION: OnceLock<DeviceSession> = OnceLock::new();
@@ -439,6 +439,8 @@ pub struct ShellState {
     pub os_control_center_error: Option<String>,
     pub os_job_runner_error: Option<String>,
     pub control_center_drawer_open: bool,
+    pub orchestrator: HierarchicalOrchestratorState,
+    pub wellfair_portal: WellfairSpecialistPortalState,
     pub chora_supervisor: ChoraWorkerSupervisorSnapshot,
     pub last_vibe_action_report: Option<GovernedVibeActionReport>,
     pub last_authoring_snapshot: Option<AuthoringWorkflowSnapshot>,
@@ -609,6 +611,8 @@ impl ShellState {
             os_control_center_error: None,
             os_job_runner_error: None,
             control_center_drawer_open: false,
+            orchestrator: HierarchicalOrchestratorState::default(),
+            wellfair_portal: WellfairSpecialistPortalState::default(),
             chora_supervisor: ChoraWorkerSupervisorSnapshot::default(),
             last_vibe_action_report: None,
             last_authoring_snapshot: None,
@@ -721,6 +725,10 @@ impl ShellState {
                 Ok(center) => (center, None),
                 Err(error) => (OsControlCenterState::default(), Some(error)),
             };
+        let orchestrator =
+            HierarchicalOrchestratorState::load_or_seed(&s.host.storage, Some(&os_control_center));
+        let wellfair_portal =
+            WellfairSpecialistPortalState::load_or_seed(&s.host.storage, s.fabric_identifier());
         let mut shell = Self {
             current_stage: VolumeStage::None,
             active_plane: IdentifierFabricPlane::NaturalAgent,
@@ -824,6 +832,8 @@ impl ShellState {
             os_control_center_error,
             os_job_runner_error: None,
             control_center_drawer_open: false,
+            orchestrator,
+            wellfair_portal,
             chora_supervisor: ChoraWorkerSupervisorSnapshot::default(),
             last_vibe_action_report: None,
             last_authoring_snapshot: None,

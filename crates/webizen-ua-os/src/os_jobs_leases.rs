@@ -461,6 +461,10 @@ impl OsControlCenterState {
             .count()
     }
 
+    pub fn is_qap_lease_granted(&self, package_id: &str, scope: CapabilityLeaseScope) -> bool {
+        !self.qap_lease_revoked(package_id, scope)
+    }
+
     pub fn enqueue_os_job(
         &mut self,
         storage: &Path,

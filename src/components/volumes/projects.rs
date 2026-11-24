@@ -1,10 +1,12 @@
 // Copyright (c) 2026 Timothy Charles Holborn.
 // SPDX-License-Identifier: CC-BY-NC-ND-4.0
 
-use crate::state::{contribution_lens, ShellState, WebizenRefractModel};
+use crate::state::{contribution_lens, session, ShellState, WebizenRefractModel};
 use aether::prelude::*;
 use aether::refract::{ContributionStage, ContributionStageView};
-use webizen_ua_os::validate_human_centric_host_nomenclature;
+use webizen_ua_os::{
+    validate_human_centric_host_nomenclature, HostedProjectOwnershipStage,
+};
 
 #[component]
 pub fn ProjectsVolume(state: Signal<ShellState>) -> Element {
@@ -16,9 +18,10 @@ pub fn ProjectsVolume(state: Signal<ShellState>) -> Element {
                 class: "settings-head",
                 h3 { "Projects · Cooperative Work-Graph & Nine-Stage Contribution Lifecycle" }
                 p {
-                    "Transport-neutral cooperative project ledger (qualia-cooperative-core & work-graph). Effort (integer minutes) and capital/reimbursable expenses (signed minor units, banker's rounding) merge add-wins by stable entry ID so replayed sync frames never double-count obligations."
+                    "Transport-neutral cooperative project ledger (qualia-cooperative-core & work-graph). Covers Foundational Wellbeing & Human-Rights Protection, Community Grounds & Bioregional Infrastructure, and QualiaDB & Webizen Ecosystem Advancement."
                 }
             }
+            CooperativeProjectArchetypesPanel { state }
             section {
                 class: "id-list",
                 h4 { "Nine-Stage Contribution, Valuation, Obligation & Licence-Transition Pipeline" }
@@ -36,6 +39,171 @@ pub fn ProjectsVolume(state: Signal<ShellState>) -> Element {
                 ContributionLifecyclePreview {}
             }
             p { class: "muted", "Local work-graph & .q42j journal root: {vault}" }
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CooperativeProjectArchetype {
+    FoundationalWellbeingAndHumanRights,
+    CommunityGroundsAndBioregionalCommons,
+    QualiaDbAndWebizenEcosystemAdvancement,
+}
+
+impl CooperativeProjectArchetype {
+    pub const ALL: [Self; 3] = [
+        Self::FoundationalWellbeingAndHumanRights,
+        Self::CommunityGroundsAndBioregionalCommons,
+        Self::QualiaDbAndWebizenEcosystemAdvancement,
+    ];
+
+    pub const fn title(self) -> &'static str {
+        match self {
+            Self::FoundationalWellbeingAndHumanRights => {
+                "1. Foundational Wellbeing, Welfare & Human-Rights Protection"
+            }
+            Self::CommunityGroundsAndBioregionalCommons => {
+                "2. Community Grounds, Solar Microgrid & Bioregional Commons"
+            }
+            Self::QualiaDbAndWebizenEcosystemAdvancement => {
+                "3. QualiaDB, Aether, Etalon & Permissive Commons Ecosystem Advancement"
+            }
+        }
+    }
+
+    pub const fn template_spec(
+        self,
+    ) -> (&'static str, &'static str, &'static str, HostedProjectOwnershipStage, &'static str) {
+        match self {
+            Self::FoundationalWellbeingAndHumanRights => (
+                "proj:wellfair-human-rights-protection",
+                "Principal Foundational Wellbeing, Housing & Specialist Advocacy Casework",
+                "wellfair.ns.webcivics.net",
+                HostedProjectOwnershipStage::PersonalOwnerProject,
+                "Coordinates legal advocacy, safe housing habitability, clinical psychology (ADHD/PTSD accommodations), and general practice care via strong-auth Specialist Portal leases. Separates pro-bono / mutual-aid / human-rights no-charge contributions from commercial obligation pools.",
+            ),
+            Self::CommunityGroundsAndBioregionalCommons => (
+                "proj:community-grounds-bioregional-node",
+                "Community Grounds · Shared Land, Solar Microgrid & Regional Edge Host",
+                "grounds.civics.au",
+                HostedProjectOwnershipStage::CooperativeGroupProject,
+                "Cooperatively stewarded physical & digital commons: regional webizen-hostd edge node, 10D v2 HOLO land/microgrid digital twin, shared housing/utilities quorum, and regional Q-CDN Swarm seeding.",
+            ),
+            Self::QualiaDbAndWebizenEcosystemAdvancement => (
+                "proj:qualiadb-webizen-core-advancement",
+                "QualiaDB, Aether Native, Etalon GPU & Bio2RDF .q42 Commons Advancement",
+                "qualiadb.webizen.org",
+                HostedProjectOwnershipStage::TransitionedPersonalToGroupProject,
+                "Advances core QualiaDB symbolic engines, Bio2RDF/CML .q42 public ontology compilations, Aether native RSX viewports, and Two-Loop Permissive Commons obligation discharge.",
+            ),
+        }
+    }
+}
+
+#[component]
+fn CooperativeProjectArchetypesPanel(mut state: Signal<ShellState>) -> Element {
+    let mut active_arch = use_signal(|| CooperativeProjectArchetype::FoundationalWellbeingAndHumanRights);
+    let mut custom_title = use_signal(String::new);
+    let mut custom_domain = use_signal(String::new);
+    let mut notice = use_signal(String::new);
+
+    let hosted = state.read().host_stewardship.hosted_projects.clone();
+    let steward_did = state.read().host_vote_steward_input.clone();
+    let notice_text = notice.read().clone();
+
+    rsx! {
+        section {
+            class: "id-list",
+            h4 { "Three Cooperative Project Archetypes ({hosted.len()} Registered Workloads across Personal, Community Grounds & QualiaDB Commons)" }
+            p {
+                class: "muted",
+                "Launch or transition cooperative projects across the three foundational Webizen missions: (1) protecting a natural person's foundational wellbeing, housing, and human rights with specialist coordination; (2) building physical & digital Community Grounds; and (3) advancing the QualiaDB, Aether, Etalon, and public .q42 ontology commons."
+            }
+            div {
+                class: "plane-grid",
+                for arch in CooperativeProjectArchetype::ALL {
+                    {
+                        let is_sel = active_arch() == arch;
+                        let title = arch.title();
+                        let (id, default_title, domain, stage, summary) = arch.template_spec();
+                        let stage_title = stage.title();
+                        let steward_for_launch = steward_did.clone();
+                        rsx! {
+                            div {
+                                key: "{id}",
+                                class: "plane-card",
+                                h5 { "{title}" }
+                                p { strong { "{default_title}" } " ({domain})" }
+                                p { "Governance Stage: {stage_title}" }
+                                p { "{summary}" }
+                                div {
+                                    class: "orb-sectors",
+                                    button {
+                                        r#type: "button",
+                                        class: if is_sel { "sanctum-issue" } else { "ribbon-btn" },
+                                        onclick: move |_| {
+                                            active_arch.set(arch);
+                                            custom_title.set(default_title.into());
+                                            custom_domain.set(domain.into());
+                                        },
+                                        "Select Archetype Template"
+                                    }
+                                    button {
+                                        r#type: "button",
+                                        class: "sanctum-issue",
+                                        onclick: move |_| {
+                                            if let Some(sess) = session() {
+                                                let mut s = state.write();
+                                                let seq = s.host_stewardship.hosted_projects.len() + 1;
+                                                let new_id = format!("{id}-{seq}");
+                                                let chosen_title = if custom_title().trim().is_empty() {
+                                                    default_title.to_owned()
+                                                } else {
+                                                    custom_title().trim().to_owned()
+                                                };
+                                                let chosen_dom = if custom_domain().trim().is_empty() {
+                                                    domain.to_owned()
+                                                } else {
+                                                    custom_domain().trim().to_owned()
+                                                };
+                                                let st_did = if steward_for_launch.trim().is_empty() {
+                                                    "did:qi:steward:local-principal".to_owned()
+                                                } else {
+                                                    steward_for_launch.clone()
+                                                };
+                                                match s.host_stewardship.register_hosted_project(
+                                                    &sess.host.storage,
+                                                    &new_id,
+                                                    &chosen_title,
+                                                    &chosen_dom,
+                                                    stage,
+                                                    &st_did,
+                                                    None,
+                                                ) {
+                                                    Ok(created) => {
+                                                        s.refresh_host_profiles();
+                                                        notice.set(format!(
+                                                            "Registered Cooperative Project '{}' ({}) under stage '{}'",
+                                                            created.title,
+                                                            created.attached_domain,
+                                                            created.ownership_stage.title()
+                                                        ));
+                                                    }
+                                                    Err(err) => notice.set(err),
+                                                }
+                                            }
+                                        },
+                                        "Register & Seed Project in Host Work-Graph"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if !notice_text.is_empty() {
+                p { class: "path", role: "status", "{notice_text}" }
+            }
         }
     }
 }
@@ -556,5 +724,16 @@ mod tests {
         assert!(aud_minor_units("-2").is_err());
         assert!(aud_minor_units("0").is_err());
         assert_eq!(draft.obligation_minor(), i64::MAX);
+    }
+
+    #[test]
+    fn three_cooperative_project_archetypes_cover_wellbeing_community_grounds_and_qualiadb() {
+        for arch in CooperativeProjectArchetype::ALL {
+            let (id, title, domain, _stage, summary) = arch.template_spec();
+            assert!(!id.is_empty());
+            assert!(validate_human_centric_host_nomenclature(title).is_ok());
+            assert!(validate_human_centric_host_nomenclature(domain).is_ok());
+            assert!(validate_human_centric_host_nomenclature(summary).is_ok());
+        }
     }
 }

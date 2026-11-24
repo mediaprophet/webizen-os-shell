@@ -37,6 +37,7 @@ mod native_gpu;
 mod os_env;
 pub mod os_job_runner;
 pub mod os_jobs_leases;
+pub mod os_orchestrator;
 mod os_qcdn_mirror;
 mod poet_synth;
 pub mod portability_qecp;
@@ -46,6 +47,7 @@ pub mod sanctuary_onboarding;
 mod semantic_fs;
 mod session;
 mod updater;
+pub mod wellfair_specialist_portal;
 pub mod workspace_persistence;
 
 pub use browser_app::{
@@ -119,10 +121,12 @@ pub use mesh_simulator::{
     ThreeNodeMeshSimulationReceipt,
 };
 pub use mobile_avf::{
+    capture_mobile_field_evidence_qecp, execute_pocket_cosigner_ceremony,
     probe_mobile_avf_sanctuary, trigger_one_tap_principal_ok_checkin, AvfIsolationState,
-    AvfSanctuaryProbe, MobileAvfSanctuaryProfile, MobileOneTapCheckInReceipt,
-    P64ThermalBatteryGovernor, ThermalPressureLevel, ThumbArcOrbGeometry, ThumbArcOrbSector,
-    VsockChannelDescriptor, VsockTierIsolation,
+    AvfSanctuaryProbe, MobileAvfSanctuaryProfile, MobileConnectivityProfile,
+    MobileFieldEvidenceRecord, MobileOneTapCheckInReceipt, P64ThermalBatteryGovernor,
+    PocketCosignerActionKind, PocketCosignerCeremonyReceipt, ThermalPressureLevel,
+    ThumbArcOrbGeometry, ThumbArcOrbSector, VsockChannelDescriptor, VsockTierIsolation,
 };
 pub use native_gpu::{
     probe_native_etalon, probe_native_vibe_providers, NativeEtalonStatus, NativeGpuAdapterInfo,
@@ -133,6 +137,11 @@ pub use os_job_runner::{OsJobInput, OsJobRunner};
 pub use os_jobs_leases::{
     CapabilityLeaseScope, OsControlCenterState, OsJobKind, OsJobRecord, OsJobStatus,
     OsNotificationSeverity, OsSystemNotification, QapCapabilityLease, OS_CONTROL_CENTER_REL_PATH,
+};
+pub use os_orchestrator::{
+    AppOrchestratorBranch, AppThreadLane, AppThreadPriority, AppThreadState,
+    ComputeExecutionTarget, ElasticComputeDispatchReceipt, EnvironmentalTier,
+    HierarchicalOrchestratorState, OS_ORCHESTRATOR_STORE_REL_PATH,
 };
 pub use poet_synth::{
     core_semantic_instruments_catalog, discover_unified_llm_vault, hypermedia_pillar_catalog,
@@ -187,6 +196,12 @@ pub use updater::{
     UpdateReceipt, FIRST_PARTY_UPDATER_PUBKEY_HEX,
 };
 
+pub use wellfair_specialist_portal::{
+    CmlEvidenceCorrelationRecord, CompiledOntologyQ42Package, DerivedSpecialistPortalBundle,
+    InstrumentAuthorRole, RoleQualifiedSemanticInstrument, SixVectorPortalAuditEntry,
+    SpecialistDisclosureLease, SpecialistDomainScope, WellfairSpecialistPortalState,
+    WELLFAIR_PORTAL_STORE_REL_PATH,
+};
 pub use workspace_persistence::{
     load_workspace_snapshot, save_workspace_snapshot, PersistedWorkspaceSnapshot,
     ShellRendererHealthSummary,

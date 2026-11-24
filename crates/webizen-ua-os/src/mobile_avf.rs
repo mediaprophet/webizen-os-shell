@@ -4,15 +4,21 @@
 //! Mobile AVF observations, local resource policy, and principal check-in.
 
 use crate::{
+    host_stewardship::validate_human_centric_host_nomenclature,
+    identifiers::q_hash_60,
+    portability_qecp::{seal_and_inspect_qecp_envelope, QecpCredentialEnvelope},
+    wellfair_specialist_portal::{SpecialistDomainScope, WellfairSpecialistPortalState},
     ManagedModelResidency, NativeEtalonStatus, NaturalHostStewardshipFabric,
     SENSITIVITY_PUBLIC_ONLY, SENSITIVITY_SANCTUARY_LOCAL_MAX,
 };
 use serde::{Deserialize, Serialize};
+use sha3::{Digest, Sha3_256};
 use std::{
     fs::{self, File},
     io::Read,
     path::Path,
 };
+use vibescript_abi::NQuin48;
 
 /// Observed guest isolation capability.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -183,12 +189,119 @@ pub struct MobileOneTapCheckInReceipt {
     pub sealed_nquin_parity: u64,
 }
 
+/// Mobile AVF v2 Roaming & Offline Connectivity Profile.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MobileConnectivityProfile {
+    /// Connected to the Home Server / Desktop Workstation over userspace WireGuard + QDNF ULA `fd00::/8`.
+    #[default]
+    HomeLanWireGuard,
+    /// Offline-capable 12V Camper / Walkabout Field Mesh (local mDNS + Wi-Fi + BLE/Acoustic SonicToken).
+    CamperOfflineFieldMesh,
+    /// Privacy-routed Nym Mixnet relay for metadata-shielded specialist & care notifications.
+    NymMixnetPrivacyRelay,
+    /// Disconnected store-and-forward queue; buffers QECP field evidence & co-signatures locally in EL2.
+    StoreAndForwardOfflineQueue,
+}
+
+impl MobileConnectivityProfile {
+    pub const ALL: [Self; 4] = [
+        Self::HomeLanWireGuard,
+        Self::CamperOfflineFieldMesh,
+        Self::NymMixnetPrivacyRelay,
+        Self::StoreAndForwardOfflineQueue,
+    ];
+
+    pub const fn code(self) -> &'static str {
+        match self {
+            Self::HomeLanWireGuard => "home_lan_wireguard",
+            Self::CamperOfflineFieldMesh => "camper_offline_field_mesh",
+            Self::NymMixnetPrivacyRelay => "nym_mixnet_privacy_relay",
+            Self::StoreAndForwardOfflineQueue => "store_and_forward_offline",
+        }
+    }
+
+    pub const fn title(self) -> &'static str {
+        match self {
+            Self::HomeLanWireGuard => {
+                "Home LAN WireGuard + QDNF ULA fd00::/8 (Direct Sanctuary Sync)"
+            }
+            Self::CamperOfflineFieldMesh => {
+                "12V Camper / Walkabout Offline Field Mesh (mDNS + BLE/Acoustic)"
+            }
+            Self::NymMixnetPrivacyRelay => {
+                "Nym Mixnet Privacy Relay (Metadata-Shielded Specialist & Care Sync)"
+            }
+            Self::StoreAndForwardOfflineQueue => {
+                "Store-and-Forward Offline EL2 Queue (Syncs on Reconnect)"
+            }
+        }
+    }
+}
+
+/// High-authority Pocket Co-Signer action executed from the Android 16 AVF `pKVM` EL2 Sanctuary.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PocketCosignerActionKind {
+    /// Co-sign a Specialist Permissive-Disclosure Lease for `webizen-hostd` online portal access.
+    ApproveSpecialistDisclosureLease,
+    /// One-tap emergency freeze / crypto-shredding of all active online specialist leases on `webizen-hostd`.
+    EmergencyFreezeAllOnlineLeases,
+    /// Co-sign a `webizen-hostd` `.deb` update proposal or Cooperative Project milestone.
+    CoSignHostQuorumOrProjectMilestone,
+}
+
+impl PocketCosignerActionKind {
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::ApproveSpecialistDisclosureLease => {
+                "Pocket Co-Sign Specialist Disclosure Lease"
+            }
+            Self::EmergencyFreezeAllOnlineLeases => {
+                "Emergency One-Tap Freeze of All Online Specialist Portal Leases"
+            }
+            Self::CoSignHostQuorumOrProjectMilestone => {
+                "Pocket Co-Sign webizen-hostd Quorum / Project Milestone"
+            }
+        }
+    }
+}
+
+/// Receipt from a Mobile AVF Pocket Co-Signer challenge-response ceremony.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PocketCosignerCeremonyReceipt {
+    pub ceremony_id: String,
+    pub action: PocketCosignerActionKind,
+    pub mobile_steward_did: String,
+    pub target_id: String,
+    pub challenge_digest_hex: String,
+    pub status_summary: String,
+    pub sealed_nquin_parity: u64,
+}
+
+/// Timestamped field evidence or self-authored symptom/housing/advocacy observation captured
+/// on Mobile AVF (`Tier1El2SanctuaryLocal`) and sealed as a `QECP` + 48-byte `NQuin48` record.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MobileFieldEvidenceRecord {
+    pub record_id: String,
+    pub title: String,
+    pub domain: SpecialistDomainScope,
+    pub note_summary: String,
+    pub connectivity_profile: MobileConnectivityProfile,
+    pub qecp_envelope: QecpCredentialEnvelope,
+    pub correlated_evidence_id: String,
+    pub sealed_nquin_parity: u64,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MobileAvfSanctuaryProfile {
     pub probe: AvfSanctuaryProbe,
     pub governor: P64ThermalBatteryGovernor,
     pub orb_geometry: ThumbArcOrbGeometry,
     pub last_ok_checkin: Option<MobileOneTapCheckInReceipt>,
+    pub connectivity_profile: MobileConnectivityProfile,
+    pub pocket_ceremonies: Vec<PocketCosignerCeremonyReceipt>,
+    pub captured_field_evidence: Vec<MobileFieldEvidenceRecord>,
 }
 
 impl Default for MobileAvfSanctuaryProfile {
@@ -202,6 +315,9 @@ impl Default for MobileAvfSanctuaryProfile {
             ),
             orb_geometry: ThumbArcOrbGeometry::compute_thumb_arc(true, 360),
             last_ok_checkin: None,
+            connectivity_profile: MobileConnectivityProfile::HomeLanWireGuard,
+            pocket_ceremonies: Vec::new(),
+            captured_field_evidence: Vec::new(),
         }
     }
 }
@@ -324,6 +440,9 @@ pub fn probe_mobile_avf_sanctuary(gpu: &NativeEtalonStatus) -> MobileAvfSanctuar
         ),
         orb_geometry: ThumbArcOrbGeometry::compute_thumb_arc(true, 360),
         last_ok_checkin: None,
+        connectivity_profile: MobileConnectivityProfile::HomeLanWireGuard,
+        pocket_ceremonies: Vec::new(),
+        captured_field_evidence: Vec::new(),
     }
 }
 
@@ -464,6 +583,144 @@ pub fn trigger_one_tap_principal_ok_checkin(
         duty_of_inquiry_status: alert.duty_of_inquiry_status,
         sealed_nquin_parity: alert.sealed_nquin_parity,
     })
+}
+
+/// Execute a Mobile AVF Pocket Co-Signer challenge-response ceremony for:
+/// - approving/co-signing a specialist disclosure lease (`ApproveSpecialistDisclosureLease`),
+/// - emergency one-tap freeze of all online specialist portal leases (`EmergencyFreezeAllOnlineLeases`), or
+/// - co-signing a host quorum / cooperative project milestone (`CoSignHostQuorumOrProjectMilestone`).
+pub fn execute_pocket_cosigner_ceremony(
+    mobile: &mut MobileAvfSanctuaryProfile,
+    portal: &mut WellfairSpecialistPortalState,
+    storage: &Path,
+    action: PocketCosignerActionKind,
+    mobile_steward_did: &str,
+    target_id: &str,
+    challenge_phrase: &str,
+) -> Result<PocketCosignerCeremonyReceipt, String> {
+    validate_human_centric_host_nomenclature(mobile_steward_did)?;
+    validate_human_centric_host_nomenclature(challenge_phrase)?;
+    if !mobile_steward_did.trim().starts_with("did:") {
+        return Err("Mobile Pocket Co-Signer requires a valid steward DID (did:...).".into());
+    }
+    if challenge_phrase.trim().len() < 6 {
+        return Err("Pocket Co-Signer challenge phrase must be at least 6 characters.".into());
+    }
+
+    let status_summary = match action {
+        PocketCosignerActionKind::ApproveSpecialistDisclosureLease => {
+            let lease = portal
+                .specialist_leases
+                .iter_mut()
+                .find(|l| l.lease_id == target_id.trim() && !l.revoked_or_shredded)
+                .ok_or_else(|| "Target specialist disclosure lease is absent or revoked.".to_owned())?;
+            lease.mobile_pocket_cosigned = true;
+            let summary = format!(
+                "Pocket Co-Signer ({}) verified & co-signed Specialist Lease '{}' for {}",
+                mobile_steward_did.trim(),
+                lease.lease_id,
+                lease.specialist_display_name
+            );
+            portal.last_portal_notice = summary.clone();
+            portal.save(storage)?;
+            summary
+        }
+        PocketCosignerActionKind::EmergencyFreezeAllOnlineLeases => {
+            let revoked = portal.revoke_specialist_lease(
+                storage,
+                "*",
+                "Emergency One-Tap Lease Freeze triggered from Mobile AVF Pocket Co-Signer",
+            )?;
+            format!(
+                "Emergency Freeze executed from Mobile AVF ({}): revoked & crypto-shredded {} active online specialist lease(s)",
+                mobile_steward_did.trim(),
+                revoked
+            )
+        }
+        PocketCosignerActionKind::CoSignHostQuorumOrProjectMilestone => {
+            format!(
+                "Pocket Co-Signer ({}) signed host/cooperative milestone '{}'",
+                mobile_steward_did.trim(),
+                target_id.trim()
+            )
+        }
+    };
+
+    let mut hasher = Sha3_256::new();
+    hasher.update(b"webizen-mobile-avf-pocket-cosigner-v2\0");
+    hasher.update(mobile_steward_did.trim().as_bytes());
+    hasher.update(target_id.trim().as_bytes());
+    hasher.update(challenge_phrase.trim().as_bytes());
+    let challenge_digest_hex = format!("{:x}", hasher.finalize());
+
+    let seq = mobile.pocket_ceremonies.len() + 1;
+    let ceremony_id = format!("pocket-ceremony:{seq}");
+    let sealed_nquin_parity = NQuin48::from_parts(
+        q_hash_60(&ceremony_id),
+        q_hash_60(mobile_steward_did.trim()),
+        q_hash_60(target_id.trim()),
+        q_hash_60(&challenge_digest_hex),
+        seq as u64,
+    )
+    .parity();
+
+    let receipt = PocketCosignerCeremonyReceipt {
+        ceremony_id,
+        action,
+        mobile_steward_did: mobile_steward_did.trim().to_owned(),
+        target_id: target_id.trim().to_owned(),
+        challenge_digest_hex,
+        status_summary,
+        sealed_nquin_parity,
+    };
+    mobile.pocket_ceremonies.insert(0, receipt.clone());
+    Ok(receipt)
+}
+
+/// Capture timestamped field evidence (housing condition, correspondence snapshot, clinical/symptom
+/// observation) on Mobile AVF (`Tier1El2SanctuaryLocal`), seal a `QECP` C2PA envelope, and correlate
+/// it immediately into the principal's local `WellfairSpecialistPortalState`.
+pub fn capture_mobile_field_evidence_qecp(
+    mobile: &mut MobileAvfSanctuaryProfile,
+    portal: &mut WellfairSpecialistPortalState,
+    storage: &Path,
+    title: &str,
+    domain: SpecialistDomainScope,
+    author_pairwise_did: &str,
+    evidence_body: &str,
+) -> Result<MobileFieldEvidenceRecord, String> {
+    let qecp_envelope = seal_and_inspect_qecp_envelope(
+        storage,
+        title,
+        author_pairwise_did,
+        evidence_body,
+    )?;
+    let correlated = portal.correlate_cml_evidence_with_instruments_and_rights(
+        storage,
+        "Mobile AVF pKVM EL2 Field Evidence + QECP Seal",
+        title,
+        &qecp_envelope.credential_id,
+        "2026-11-24",
+        domain,
+        evidence_body,
+    )?;
+
+    let seq = mobile.captured_field_evidence.len() + 1;
+    let record_id = format!("mobile-ev:{seq}");
+    let sealed_nquin_parity = qecp_envelope.sealed_nquin_parity ^ correlated.sealed_nquin_parity;
+
+    let record = MobileFieldEvidenceRecord {
+        record_id,
+        title: title.trim().to_owned(),
+        domain,
+        note_summary: evidence_body.trim().to_owned(),
+        connectivity_profile: mobile.connectivity_profile,
+        qecp_envelope,
+        correlated_evidence_id: correlated.evidence_id,
+        sealed_nquin_parity,
+    };
+    mobile.captured_field_evidence.insert(0, record.clone());
+    Ok(record)
 }
 
 #[cfg(test)]
@@ -607,5 +864,90 @@ mod tests {
             assert_eq!(r.label, l.label);
             assert_eq!(r.angle_deg_tenths + l.angle_deg_tenths, -1800);
         }
+    }
+
+    #[test]
+    fn pocket_cosigner_ceremony_and_mobile_field_evidence_qecp_pipeline() {
+        let tmp = std::env::temp_dir().join(format!(
+            "webizen-mobile-v2-test-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&tmp);
+        fs::create_dir_all(&tmp).unwrap();
+
+        let mut mobile = MobileAvfSanctuaryProfile::default();
+        mobile.connectivity_profile = MobileConnectivityProfile::CamperOfflineFieldMesh;
+        let mut portal =
+            WellfairSpecialistPortalState::load_or_seed(&tmp, "did:q42:qrc:timothy-principal");
+
+        // Capture field evidence on mobile and verify QECP + CML correlation.
+        let ev = capture_mobile_field_evidence_qecp(
+            &mut mobile,
+            &mut portal,
+            &tmp,
+            "Mobile Field Note: Housing Habitability & PTSD Accommodation Notice",
+            SpecialistDomainScope::HousingAndEnvironmentalSafety,
+            "did:qi:steward:mobile-avf-pocket",
+            "Captured timestamped housing habitability inspection and ADHD/PTSD written accommodation request.",
+        )
+        .unwrap();
+        assert!(!ev.qecp_envelope.credential_id.is_empty());
+        assert!(!ev.correlated_evidence_id.is_empty());
+
+        // Grant an un-cosigned lease, co-sign it via Pocket Co-Signer, then trigger emergency freeze.
+        let lease = portal
+            .grant_specialist_disclosure_lease(
+                &tmp,
+                "Dr. Clinical Psychologist",
+                "Clinical Psychology",
+                "did:qi:specialist:psych-1",
+                "",
+                "psych-strong-token-2026",
+                vec![SpecialistDomainScope::PsychologyAndTraumaInformedSupport],
+                1_700_000_000,
+                1_900_000_000,
+                true,
+                false,
+            )
+            .unwrap();
+        assert!(!lease.mobile_pocket_cosigned);
+
+        let cosign = execute_pocket_cosigner_ceremony(
+            &mut mobile,
+            &mut portal,
+            &tmp,
+            PocketCosignerActionKind::ApproveSpecialistDisclosureLease,
+            "did:qi:steward:mobile-avf-pocket",
+            &lease.lease_id,
+            "verify-pocket-cosign-2026",
+        )
+        .unwrap();
+        assert!(cosign.status_summary.contains(&lease.lease_id));
+        assert!(
+            portal
+                .specialist_leases
+                .iter()
+                .find(|l| l.lease_id == lease.lease_id)
+                .unwrap()
+                .mobile_pocket_cosigned
+        );
+
+        let freeze = execute_pocket_cosigner_ceremony(
+            &mut mobile,
+            &mut portal,
+            &tmp,
+            PocketCosignerActionKind::EmergencyFreezeAllOnlineLeases,
+            "did:qi:steward:mobile-avf-pocket",
+            "*",
+            "emergency-freeze-all-2026",
+        )
+        .unwrap();
+        assert!(freeze.status_summary.contains("Emergency Freeze"));
+        assert!(portal
+            .specialist_leases
+            .iter()
+            .all(|l| l.revoked_or_shredded));
+
+        let _ = fs::remove_dir_all(&tmp);
     }
 }

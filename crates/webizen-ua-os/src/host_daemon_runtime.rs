@@ -1752,6 +1752,28 @@ fn handle_http_control(
             &json!({ "error": "Authorization required" }),
         );
     }
+    if (words[0], words[1]) == ("GET", "/wellfair/portal/status") {
+        let portal = crate::wellfair_specialist_portal::WellfairSpecialistPortalState::load_or_seed(
+            &cfg.storage,
+            "",
+        );
+        let active_leases = portal
+            .specialist_leases
+            .iter()
+            .filter(|l| !l.revoked_or_shredded)
+            .count();
+        return http_reply(
+            &mut stream,
+            "200 OK",
+            &json!({
+                "portal": "wellfair-specialist-permissive-disclosure-v1",
+                "active_specialist_leases": active_leases,
+                "public_ontologies_compiled": portal.compiled_ontologies.len(),
+                "six_vector_audit_entries": portal.six_vector_audit_ledger.len(),
+                "sealed_nquin_parity": portal.sealed_nquin_parity,
+            }),
+        );
+    }
     let command = match (words[0], words[1]) {
         ("GET", "/status") => HostDaemonCommand::Status,
         ("POST", "/run-tick") if bearer.is_some() => HostDaemonCommand::RunTick,
