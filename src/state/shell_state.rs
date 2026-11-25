@@ -508,6 +508,7 @@ impl ShellState {
             ram_bytes: None,
             cpu_count: None,
             cpu_brand: None,
+            wsl2_mode: webizen_ua_os::Wsl2CompatibilityMode::WindowsNativeUserSpaceOnly,
         };
         Self {
             current_stage: VolumeStage::None,
