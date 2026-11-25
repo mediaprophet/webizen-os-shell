@@ -46,6 +46,10 @@
 ### Directive 4 — 42 MiB Sentinel & Zero-Heap Hot Paths
 - All VibeScript evaluations (`vibe`, `poet_eval_native_cell`), `refract` lens updates, and per-frame rendering/kinetic callbacks (`etalon-vibe`) must execute within the 42 MiB `SlgArena` Sentinel without unbounded per-frame heap allocations.
 
+### Directive 5 — EMF-First (`Q42EMF64`), 10D HOLO & Zero-Heap `UiLayoutTree` Primary Rendering (Demoting CSS to Fallback)
+- Push UI layout, surface optics, focus/salience fields, and wave-coupled animations down the stack into `etalon-render::emf` (`EmfPipeline`, 64-byte `EmfFieldCell` with 10D manifold coordinates + 3 Stokes polarization parameters + CIE 1931 XYZ 6-band spectral color), `etalon-render::volumetric` (`VolumetricPipeline`, 96-byte `HolographicNodeGpu`), and `etalon-render::hud::UiLayoutTree` (`MAX_UI_NODES = 256` zero-heap flat-array constraint solver + `HudVertex` generator).
+- Demote CSS (`assets/shell.css`) to a minimal text-shaping (Parley), IME input, AccessKit screen-reader tree, and CPU/Software fallback layer (`RendererFallbackPolicy::CpuOnFailure`).
+
 ---
 
 ## 1. Work-Packet Register (`WP-ETALON-00A` .. `WP-ETALON-12`)
@@ -84,6 +88,10 @@
 - **`WP-ETALON-04` — Link `etalon-render` & Bind `.10d` `HOLO` (`0x0306`) Storage Buffers (`HolographicNodeGpu`)**:
   - Target files: `C:\github\Aether\packages\qualia-host\src\holographic_viewport.rs`, `src/components/viewports.rs`.
   - Convert decoded `M64HoloRecord` and `EulerianWavefieldRecord` slices into 96-byte `std430` `HolographicNodeGpu` storage buffers (`@group(1) @binding(0) var<storage, read> nodes: array<HolographicNodeGpu>`) and raymarch up to 64 3D SDF primitives per pass.
+- **`WP-ETALON-04A` — EMF-First (`Q42EMF64` / `EmfPipeline`) + Zero-Heap `UiLayoutTree` Primary GPU UI Substrate (Demoting CSS to Fallback)**:
+  - Target files: `C:\github\Aether\packages\native\src\emf_hud_substrate.rs` (new), `crates/webizen-ua-os/src/emf_ui_field.rs` (new), `src/components/viewports.rs`, `assets/shell.css`.
+  - Implement `EtalonEmfUiSubstrate` combining `etalon_render::hud::UiLayoutTree` (`MAX_UI_NODES = 256` zero-heap flat-array solver + `HudVertex` generator), 64-byte `EmfFieldCell` wavefield grids (`attention_depth`, `epistemic_weight`, `topological_spin`, `manifold_curvature`, and Stokes polarization `stokes_q/u/v` rendered via `EmfPipeline` / `EMF_VOLUMETRIC_WGSL` with CIE 1931 XYZ 6-band spectral conversion), and 96-byte `HolographicNodeGpu` SDF nodes.
+  - Strip decorative CSS bloat from `assets/shell.css`, demoting CSS to text-shaping, IME input, AccessKit semantics, and `RendererFallbackPolicy::CpuOnFailure` software fallback.
 - **`WP-ETALON-05` — Bijective 3D GPU Object Picking (`etalon-render::picking`) in `aether-native`**:
   - Target files: `C:\github\Aether\packages\native\src\viewport.rs`, `src/components/spatial_stage_3d.rs` (new).
   - Add `pick_semantic_id(local_x, local_y, width, height) -> Option<u64>` to `EtalonSurfaceDelegate` and `EtalonVectorDelegate` using `etalon_render::picking::{encode_mesh_slot, resolve_pick}` and ray-intersection so clicking any 3D primitive dispatches its `SemanticIntent`.
