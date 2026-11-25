@@ -69,7 +69,16 @@
   - Implement `SpatialManifoldTopology` (`PlanarDesktopGrid`, `CylindricalGlassArc`, `IsometricWireframeCityGrid`, `OrbitalVolumetricAmphitheatre10d`), `PostProcessShaderProfile` (`CleanSpatialSrgb`, `RefractiveCurvedGlassBloom`, `WireframePhosphorScanline`, `VolumetricSpectralHdr`), 6 built-in IP-clean cartridges (`theme-holosonic`, `theme-obsidian`, `theme-commons`, `theme-holoslate`, `theme-cyber-grid`, `theme-spatial-commons`), `project_semantic_scene_with_cartridge()`, and `verify_cartridge_affordance_equivalence()`.
 - **`WP-ETALON-03` — Live VibeScript Theme Studio & Cartridge Switcher**:
   - Target files: `src/components/stage_host.rs`, `src/components/volumes/settings.rs`, `src/components/volumes/poet_synth.rs`, `crates/webizen-ua-os/src/workspace_persistence.rs`.
-  - Wire one-click switching across all 6 Theme Cartridges, live `.vibe` projection script editing, and snapshot persistence.
+  - Wire one-click switching across all 6 Theme Cartridges and custom cartridges (`custom-theme-*`), live `.vibe` projection script editing, and snapshot persistence.
+- **`WP-ETALON-03A` — Interactive Personal Preference, Sensory & Accessibility Questionnaire + Tailored Theme Option Recommender**:
+  - Target files: `crates/webizen-ua-os/src/theme_discovery_questionnaire.rs` (new), `src/components/volumes/settings.rs`, `src/components/volumes/sanctuary.rs`.
+  - Ask the user friendly plain-English questions about reading scale (`100%..165%`), contrast/glare comfort, color-vision profile (`Standard`, `Deuteranopia/Protanopia`, `Tritanopia`, `Monochrome`), vestibular/motion comfort (`Full 3D Kinetics`, `Gentle Damped`, `Strict Zero-Motion Static`), workspace density/style, and acoustic feedback.
+  - Implement `recommend_environment_options(&UserEnvironmentQuestionnaire) -> [RecommendedEnvironmentOption; 3]` returning 3 tailored, ranked environment options (`Primary Tailored Match`, `High-Clarity Comfort Variant`, `Spatial Exploration Variant`) with instant one-click preview and adoption. Keep answers strictly local (`SENSITIVITY_PRIVATE`).
+- **`WP-ETALON-03B` — Conversational LLM Theme Co-Designer, Fail-Closed WCAG/Affordance Verifier & Permissive Commons `.hmc` Theme Sharing**:
+  - Target files: `crates/webizen-ua-os/src/llm_theme_codesigner.rs` (new), `src/components/volumes/settings.rs`, `src/components/volumes/poet_synth.rs`.
+  - Allow the user to work conversationally with a local `.p64` or governed external MCP LLM (`SENSITIVITY_PUBLIC_ONLY = 0` gate enforced) to generate or refine a custom `ThemeCartridgeManifest` + `.vibe` projection script from natural-language prompts.
+  - Gate every LLM-designed theme through a 3-stage fail-closed verifier: (1) human-rights nomenclature & IP-cleanliness check, (2) WCAG luminance contrast auto-repair ($\ge 4.5:1$ AA / $7.0:1$ AAA), and (3) `verify_cartridge_affordance_equivalence` + `etalon_wgsl_forge::validate_wgsl`.
+  - Support exporting/sharing custom themes as signed **Permissive Commons** `.hmc` / `.q42` Theme Cartridge bundles (`SharedThemeCartridgeBundle` with 48-byte `NQuin48` author attribution and SHA3-256 digest) and importing shared themes into `CollectedInactive` state (`collect != activate`) for inspection before activation.
 
 ### Phase 2 — Full Etalon 3D GPU Pipeline Integration in `Aether`
 - **`WP-ETALON-04` — Link `etalon-render` & Bind `.10d` `HOLO` (`0x0306`) Storage Buffers (`HolographicNodeGpu`)**:
