@@ -365,6 +365,9 @@ pub struct ShellState {
     pub orb_toast: String,
     pub theme_preset: &'static str,
     pub reduced_motion: bool,
+    pub ui_scale_percent: u16,
+    pub animate_icons: bool,
+    pub icon_vibe_formula: String,
     pub p2p_peers_count: usize,
     pub nym_mixnet_active: bool,
     pub spatial_mode: bool,
@@ -521,6 +524,9 @@ impl ShellState {
             orb_toast: String::new(),
             theme_preset: "theme-holosonic",
             reduced_motion: false,
+            ui_scale_percent: 115,
+            animate_icons: true,
+            icon_vibe_formula: "= 1.25 * 1.6".into(),
             p2p_peers_count: 0,
             nym_mixnet_active: false,
             spatial_mode: true,
@@ -741,6 +747,9 @@ impl ShellState {
             orb_toast: String::new(),
             theme_preset: "theme-holosonic",
             reduced_motion: false,
+            ui_scale_percent: 115,
+            animate_icons: true,
+            icon_vibe_formula: "= 1.25 * 1.6".into(),
             p2p_peers_count: 0,
             nym_mixnet_active: false,
             spatial_mode: true,
@@ -902,6 +911,8 @@ impl ShellState {
             .into(),
             theme_preset: self.theme_preset.into(),
             reduced_motion: self.reduced_motion,
+            ui_scale_percent: self.ui_scale_percent.clamp(85, 175),
+            animate_icons: self.animate_icons,
             inspect_continuity_open: self.inspect_continuity_open,
             active_holo_specimen_id: self.active_holo_specimen_id.clone(),
             holo_scale_k: self.holo_scale_k.min(4),
@@ -938,6 +949,12 @@ impl ShellState {
             _ => "theme-holosonic",
         };
         self.reduced_motion = snap.reduced_motion;
+        self.ui_scale_percent = if (85..=175).contains(&snap.ui_scale_percent) {
+            snap.ui_scale_percent
+        } else {
+            115
+        };
+        self.animate_icons = snap.animate_icons;
         self.inspect_continuity_open = snap.inspect_continuity_open;
         self.active_holo_specimen_id
             .clone_from(&snap.active_holo_specimen_id);

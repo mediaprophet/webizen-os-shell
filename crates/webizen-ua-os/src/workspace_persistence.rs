@@ -26,6 +26,8 @@ pub struct PersistedWorkspaceSnapshot {
     pub stage_chrome_mode: String,
     pub theme_preset: String,
     pub reduced_motion: bool,
+    pub ui_scale_percent: u16,
+    pub animate_icons: bool,
     pub inspect_continuity_open: bool,
     pub active_holo_specimen_id: String,
     pub holo_scale_k: u8,
@@ -42,6 +44,8 @@ impl Default for PersistedWorkspaceSnapshot {
             stage_chrome_mode: "default-depth".into(),
             theme_preset: "theme-holosonic".into(),
             reduced_motion: false,
+            ui_scale_percent: 115,
+            animate_icons: true,
             inspect_continuity_open: false,
             active_holo_specimen_id: String::new(),
             holo_scale_k: 2,
@@ -96,6 +100,9 @@ impl PersistedWorkspaceSnapshot {
             "theme-holosonic" | "theme-obsidian" | "theme-commons"
         ) {
             return Err("Unknown workspace theme");
+        }
+        if !(85..=175).contains(&self.ui_scale_percent) {
+            return Err("Invalid workspace UI scale percentage");
         }
         if self.holo_scale_k > MAX_HARMONIC_ORDER || !bounded_address(&self.active_holo_specimen_id)
         {

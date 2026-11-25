@@ -87,7 +87,7 @@ main#main {
   margin: 0;
   padding: 0;
   overflow: hidden;
-  font: 13.5px/1.48 "Segoe UI", system-ui, -apple-system, sans-serif;
+  font: 15px/1.5 "Segoe UI", system-ui, -apple-system, sans-serif;
   color: var(--ink);
   background: var(--void);
 }
@@ -127,7 +127,7 @@ main#main {
   width: 100%;
   height: 100%;
   display: grid;
-  grid-template-columns: 7.4rem minmax(0, 1fr);
+  grid-template-columns: 8.2rem minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr) auto;
   overflow: hidden;
 }
@@ -139,7 +139,7 @@ main#main {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 0.28rem;
+  gap: 0.32rem;
   padding: 0.55rem 0.45rem;
   overflow-y: auto;
   overflow-x: hidden;
@@ -149,7 +149,7 @@ main#main {
 }
 
 .brand-slot {
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--mute);
   letter-spacing: 0.06em;
@@ -161,8 +161,8 @@ main#main {
 }
 
 .halo h2 {
-  margin: 0.25rem 0 0.1rem;
-  font-size: 9px;
+  margin: 0.28rem 0 0.12rem;
+  font-size: 10.5px;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -183,9 +183,9 @@ main#main {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0.18rem;
+  gap: 0.22rem;
   width: 100%;
-  padding: 0.34rem 0.25rem;
+  padding: 0.38rem 0.25rem;
   border: 1px solid transparent;
   border-radius: 10px;
   background: transparent;
@@ -197,15 +197,46 @@ main#main {
 }
 
 .fav .orb {
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
+  font-size: 15px;
   background: var(--surface-2);
   border: 1px solid var(--line);
+  overflow: hidden;
+}
+
+.holo-icon-object {
+  display: block;
+  width: 30px;
+  height: 30px;
+  pointer-events: none;
+}
+
+.card-holo-glyph {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.card-holo-glyph .holo-icon-object {
+  width: 24px;
+  height: 24px;
+}
+
+.a11y-quick-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  flex-wrap: wrap;
 }
 
 .fav.human .orb {
@@ -234,8 +265,8 @@ main#main {
 }
 
 .fav .label {
-  font-size: 10px;
-  line-height: 1.2;
+  font-size: 12px;
+  line-height: 1.25;
   color: var(--ink-soft);
   font-weight: 600;
   max-width: 100%;
@@ -282,7 +313,7 @@ main#main {
 }
 
 .ribbon-tag {
-  font-size: 10px;
+  font-size: 11.5px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -295,9 +326,9 @@ main#main {
   border: 1px solid var(--line-strong);
   background: var(--surface-2);
   color: var(--ink-soft);
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 600;
-  padding: 0.3rem 0.7rem;
+  padding: 0.32rem 0.72rem;
   border-radius: 7px;
   cursor: pointer;
   display: inline-flex;
@@ -320,7 +351,7 @@ main#main {
 }
 
 .ribbon-note {
-  font-size: 11px;
+  font-size: 12.5px;
   color: var(--mute);
   flex: 1;
   text-align: right;
@@ -575,11 +606,11 @@ main#main {
 .vol-card .cap {
   display: flex;
   align-items: center;
-  gap: 0.45rem;
-  padding: 0.5rem 0.75rem;
+  gap: 0.5rem;
+  padding: 0.55rem 0.8rem;
   background: var(--surface-2);
   border-bottom: 1px solid var(--line);
-  font-size: 12px;
+  font-size: 13.5px;
   width: 100%;
 }
 
@@ -598,21 +629,21 @@ main#main {
 }
 
 .vol-card .body {
-  padding: 0.7rem 0.85rem 0.85rem;
+  padding: 0.75rem 0.9rem 0.9rem;
   color: var(--ink-soft);
-  font-size: 12px;
+  font-size: 13.5px;
 }
 
 .vol-card .body h3 {
-  margin: 0 0 0.28rem;
-  font-size: 13px;
+  margin: 0 0 0.32rem;
+  font-size: 14.5px;
   color: var(--ink);
   font-weight: 700;
 }
 
 .vol-card .body p {
   margin: 0;
-  line-height: 1.42;
+  line-height: 1.48;
   color: var(--mute);
 }
 
@@ -886,8 +917,8 @@ button {
   border-radius: 8px;
   background: var(--surface-2);
   color: var(--ink);
-  padding: 0.38rem 0.75rem;
-  font: 600 12px/1.3 "Segoe UI", system-ui, sans-serif;
+  padding: 0.42rem 0.8rem;
+  font: 600 13.5px/1.35 "Segoe UI", system-ui, sans-serif;
   cursor: pointer;
 }
 
@@ -903,13 +934,13 @@ button:disabled {
 
 .sanctum-issue {
   margin: 0 0.4rem 0.45rem 0;
-  padding: 0.42rem 0.82rem;
+  padding: 0.45rem 0.88rem;
   border-radius: 8px;
   border: 1px solid var(--teal);
   background: var(--teal-dim);
   color: var(--ink);
   cursor: pointer;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 600;
 }
 
@@ -929,8 +960,8 @@ select {
   border-radius: 8px;
   background: var(--surface-0);
   color: var(--ink);
-  padding: 0.44rem 0.65rem;
-  font: 12.5px/1.4 "Segoe UI", system-ui, sans-serif;
+  padding: 0.48rem 0.7rem;
+  font: 14px/1.45 "Segoe UI", system-ui, sans-serif;
   min-width: 0;
 }
 

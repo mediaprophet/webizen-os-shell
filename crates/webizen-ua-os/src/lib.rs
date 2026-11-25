@@ -50,6 +50,8 @@ mod updater;
 pub mod wellfair_specialist_portal;
 pub mod workspace_persistence;
 
+pub use etalon_vibe;
+
 pub use browser_app::{
     evaluate_hybrid_page_request, evaluate_hybrid_page_request_in_storage, hybrid_https_origin,
     inspect_browser_product, resolve_mode_for_uri, upgrade_browser_product_independent,

@@ -328,48 +328,173 @@ fn SettingsSectionBody(section: SettingsSection, mut state: Signal<ShellState>) 
             }
         },
         SettingsSection::Appearance => {
+            let (ui_scale_percent, animate_icons, icon_vibe_formula) = {
+                let shell = state.read();
+                (
+                    shell.ui_scale_percent,
+                    shell.animate_icons,
+                    shell.icon_vibe_formula.clone(),
+                )
+            };
+            let omega = crate::components::eval_vibe_icon_omega(&icon_vibe_formula);
             let motion_label = if reduced_motion {
-                "Reduced Motion: ON (3D transforms flattened)"
+                "Reduced Motion: ON (3D transforms & icon animations paused)"
+            } else if animate_icons {
+                "Reduced Motion: OFF · Etalon 3D/Vector Icons: LIVE"
             } else {
-                "Reduced Motion: OFF (Spatial depth & float active)"
+                "Reduced Motion: OFF · Etalon 3D/Vector Icons: STATIC"
             };
             rsx! {
                 div {
                     header {
                         class: "settings-head",
-                        h3 { "6. Appearance & Access · Synth Theme Scope & WCAG AA Accessibility" }
-                        p { "Accessible presets generated with Synth hypermedia.layout.bind_theme_scope. Keyboard reachability, labelled controls, and reduced-motion support are first-class." }
+                        h3 { "6. Appearance & Access · Synth Theme Scope, Live UI Zoom & VibeScript 3D Icons" }
+                        p { "Accessible presets generated with Synth hypermedia.layout.bind_theme_scope. Adjust live Blitz/Parley text & UI scaling (85%–175%, or Ctrl+= / Ctrl+- / Ctrl+0), WCAG AAA High-Contrast themes, and VibeScript-driven Etalon 3D/Vector icon kinetics." }
                     }
-                    div {
-                        button {
-                            r#type: "button",
-                            class: "sanctum-issue",
-                            onclick: move |_| state.write().theme_preset = "theme-holosonic",
-                            "Preset 1: Holosonic Dark (Default Spatial)"
-                        }
-                        button {
-                            r#type: "button",
-                            class: "sanctum-issue",
-                            onclick: move |_| state.write().theme_preset = "theme-obsidian",
-                            "Preset 2: High-Contrast Obsidian (WCAG AAA)"
-                        }
-                        button {
-                            r#type: "button",
-                            class: "sanctum-issue",
-                            onclick: move |_| state.write().theme_preset = "theme-commons",
-                            "Preset 3: Permissive Commons Teal"
-                        }
-                        button {
-                            r#type: "button",
-                            class: "sanctum-issue",
-                            onclick: move |_| {
-                                let cur = state.read().reduced_motion;
-                                state.write().reduced_motion = !cur;
-                            },
-                            "Toggle Reduced Motion"
+                    section {
+                        class: "id-list",
+                        h4 { "Text & Interface Scale (Live Native Viewport Zoom: {ui_scale_percent}%)" }
+                        p { class: "muted", "Scales all typography, controls, and spatial cards across the entire native window via Blitz Viewport::zoom and Parley font re-shaping." }
+                        div {
+                            class: "input-row",
+                            button {
+                                r#type: "button",
+                                class: "sanctum-issue",
+                                onclick: move |_| {
+                                    let next = state.read().ui_scale_percent.saturating_sub(10).max(85);
+                                    state.write().ui_scale_percent = next;
+                                },
+                                "A− Zoom Out (−10%)"
+                            }
+                            button {
+                                r#type: "button",
+                                class: if ui_scale_percent == 100 { "sanctum-issue" } else { "ribbon-btn" },
+                                onclick: move |_| state.write().ui_scale_percent = 100,
+                                "100% (Compact)"
+                            }
+                            button {
+                                r#type: "button",
+                                class: if ui_scale_percent == 115 { "sanctum-issue" } else { "ribbon-btn" },
+                                onclick: move |_| state.write().ui_scale_percent = 115,
+                                "115% (Default Comfortable)"
+                            }
+                            button {
+                                r#type: "button",
+                                class: if ui_scale_percent == 125 { "sanctum-issue" } else { "ribbon-btn" },
+                                onclick: move |_| state.write().ui_scale_percent = 125,
+                                "125% (Large)"
+                            }
+                            button {
+                                r#type: "button",
+                                class: if ui_scale_percent == 140 { "sanctum-issue" } else { "ribbon-btn" },
+                                onclick: move |_| state.write().ui_scale_percent = 140,
+                                "140% (Extra Large)"
+                            }
+                            button {
+                                r#type: "button",
+                                class: if ui_scale_percent == 160 { "sanctum-issue" } else { "ribbon-btn" },
+                                onclick: move |_| state.write().ui_scale_percent = 160,
+                                "160% (Max Accessibility)"
+                            }
+                            button {
+                                r#type: "button",
+                                class: "sanctum-issue",
+                                onclick: move |_| {
+                                    let next = (state.read().ui_scale_percent + 10).min(175);
+                                    state.write().ui_scale_percent = next;
+                                },
+                                "A+ Zoom In (+10%)"
+                            }
                         }
                     }
-                    p { class: "muted", "Active Theme Preset: {theme_preset} · {motion_label}" }
+                    section {
+                        class: "id-list",
+                        h4 { "Etalon 3D / Vector Phase-Space Icons & VibeScript Kinetics (ω = {omega:.2} rad/s)" }
+                        p { class: "muted", "Icons render directly into the shared Etalon GPU scene via aether_native::EtalonVectorWidget and etalon_vibe (oracle_project_10d_to_3d, oracle_spring_damper_force, oracle_verlet_step, oracle_sh_irradiance_probe)." }
+                        div {
+                            class: "input-row",
+                            button {
+                                r#type: "button",
+                                class: "sanctum-issue",
+                                onclick: move |_| {
+                                    let mut s = state.write();
+                                    s.animate_icons = !s.animate_icons;
+                                    if s.animate_icons {
+                                        s.reduced_motion = false;
+                                    }
+                                },
+                                if animate_icons && !reduced_motion {
+                                    "Pause Animated 3D Icons"
+                                } else {
+                                    "Enable Animated 3D Icons"
+                                }
+                            }
+                            button {
+                                r#type: "button",
+                                class: "sanctum-issue",
+                                onclick: move |_| {
+                                    let cur = state.read().reduced_motion;
+                                    state.write().reduced_motion = !cur;
+                                },
+                                "Toggle Reduced Motion"
+                            }
+                        }
+                        div {
+                            class: "input-row",
+                            label {
+                                "VibeScript Icon Kinetic Frequency Cell (rad/s)"
+                                input {
+                                    class: "input-field",
+                                    value: "{icon_vibe_formula}",
+                                    oninput: move |evt| state.write().icon_vibe_formula = evt.value(),
+                                }
+                            }
+                            button {
+                                r#type: "button",
+                                class: "ribbon-btn",
+                                onclick: move |_| state.write().icon_vibe_formula = "= 0.85 * 1.0".into(),
+                                "Gentle (= 0.85 * 1.0)"
+                            }
+                            button {
+                                r#type: "button",
+                                class: "ribbon-btn",
+                                onclick: move |_| state.write().icon_vibe_formula = "= 1.25 * 1.6".into(),
+                                "Default (= 1.25 * 1.6)"
+                            }
+                            button {
+                                r#type: "button",
+                                class: "ribbon-btn",
+                                onclick: move |_| state.write().icon_vibe_formula = "= 2.0 * 1.75".into(),
+                                "Harmonic Burst (= 2.0 * 1.75)"
+                            }
+                        }
+                    }
+                    section {
+                        class: "id-list",
+                        h4 { "Colour & Contrast Theme Presets" }
+                        div {
+                            class: "input-row",
+                            button {
+                                r#type: "button",
+                                class: "sanctum-issue",
+                                onclick: move |_| state.write().theme_preset = "theme-holosonic",
+                                "Preset 1: Holosonic Dark (Default Spatial)"
+                            }
+                            button {
+                                r#type: "button",
+                                class: "sanctum-issue",
+                                onclick: move |_| state.write().theme_preset = "theme-obsidian",
+                                "Preset 2: High-Contrast Obsidian (WCAG AAA)"
+                            }
+                            button {
+                                r#type: "button",
+                                class: "sanctum-issue",
+                                onclick: move |_| state.write().theme_preset = "theme-commons",
+                                "Preset 3: Permissive Commons Teal"
+                            }
+                        }
+                        p { class: "muted", "Active Theme Preset: {theme_preset} · UI Scale: {ui_scale_percent}% · {motion_label}" }
+                    }
                     WorkspaceSave { state }
                 }
             }

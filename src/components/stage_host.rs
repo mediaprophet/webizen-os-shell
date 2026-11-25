@@ -1,4 +1,5 @@
 use super::auxiliary_windows::AuxWindowBridge;
+use super::holo_glyph::{eval_vibe_icon_omega, HoloGlyphIcon, HoloGlyphKind};
 use super::volumes::{
     admin::AdminVolume,
     browser::BrowserVolume,
@@ -32,6 +33,9 @@ pub fn StageHost(mut state: Signal<ShellState>) -> Element {
     let orb_toast = s.orb_toast.clone();
     let chrome_mode = s.stage_chrome_mode;
     let control_center_open = s.control_center_drawer_open;
+    let ui_scale_percent = s.ui_scale_percent;
+    let high_contrast = s.theme_preset == "theme-obsidian";
+    let animating_icons = s.animate_icons && !s.reduced_motion;
     let renderer = s.renderer_health.clone();
     let (width, height) = renderer.viewport_dimensions;
     drop(s);
@@ -81,6 +85,93 @@ pub fn StageHost(mut state: Signal<ShellState>) -> Element {
                     class: "ribbon-note",
                     strong { "{plane_title}: " }
                     span { "{plane_rule}" }
+                }
+                div {
+                    class: "a11y-quick-bar",
+                    role: "group",
+                    aria_label: "Quick accessibility and text scaling controls",
+                    button {
+                        r#type: "button",
+                        class: "ribbon-btn",
+                        title: "Decrease text & UI scale by 10% (Ctrl+-)",
+                        aria_label: "Decrease text and UI size",
+                        onclick: move |_| {
+                            let next = state.read().ui_scale_percent.saturating_sub(10).max(85);
+                            state.write().ui_scale_percent = next;
+                        },
+                        "A−"
+                    }
+                    button {
+                        r#type: "button",
+                        class: "ribbon-btn active",
+                        title: "Current UI & text scale ({ui_scale_percent}%). Click to cycle presets (100% · 115% · 130% · 145%), or press Ctrl+0 for 115%.",
+                        aria_label: "Cycle UI scale preset ({ui_scale_percent}%)",
+                        onclick: move |_| {
+                            let cur = state.read().ui_scale_percent;
+                            let next = match cur {
+                                85..=104 => 115,
+                                105..=120 => 130,
+                                121..=138 => 145,
+                                _ => 100,
+                            };
+                            state.write().ui_scale_percent = next;
+                        },
+                        "{ui_scale_percent}%"
+                    }
+                    button {
+                        r#type: "button",
+                        class: "ribbon-btn",
+                        title: "Increase text & UI scale by 10% (Ctrl+=)",
+                        aria_label: "Increase text and UI size",
+                        onclick: move |_| {
+                            let next = (state.read().ui_scale_percent + 10).min(175);
+                            state.write().ui_scale_percent = next;
+                        },
+                        "A+"
+                    }
+                    button {
+                        r#type: "button",
+                        class: if high_contrast { "ribbon-btn active" } else { "ribbon-btn" },
+                        title: "Toggle WCAG AAA High-Contrast Obsidian theme",
+                        aria_pressed: if high_contrast { "true" } else { "false" },
+                        onclick: move |_| {
+                            let mut s = state.write();
+                            s.theme_preset = if s.theme_preset == "theme-obsidian" {
+                                "theme-holosonic"
+                            } else {
+                                "theme-obsidian"
+                            };
+                        },
+                        "Contrast"
+                    }
+                    button {
+                        r#type: "button",
+                        class: if animating_icons { "ribbon-btn active" } else { "ribbon-btn" },
+                        title: "Toggle animated 3D/Vector Etalon icons & motion",
+                        aria_pressed: if animating_icons { "true" } else { "false" },
+                        onclick: move |_| {
+                            let mut s = state.write();
+                            if s.reduced_motion {
+                                s.reduced_motion = false;
+                                s.animate_icons = true;
+                            } else {
+                                s.animate_icons = !s.animate_icons;
+                            }
+                        },
+                        if animating_icons { "3D Icons: Live" } else { "3D Icons: Static" }
+                    }
+                    button {
+                        r#type: "button",
+                        class: "ribbon-btn",
+                        title: "Open Appearance & Accessibility settings",
+                        onclick: move |_| {
+                            let mut s = state.write();
+                            s.current_stage = VolumeStage::Settings;
+                            s.active_plane = VolumeStage::Settings.primary_plane();
+                            s.settings_section = SettingsSection::Appearance;
+                        },
+                        "Access ⚙"
+                    }
                 }
                 button {
                     r#type: "button",
@@ -609,6 +700,13 @@ fn ManifoldCard(
     stage: VolumeStage,
     mut state: Signal<ShellState>,
 ) -> Element {
+    let s = state.read();
+    let animating = s.animate_icons && !s.reduced_motion;
+    let omega = eval_vibe_icon_omega(&s.icon_vibe_formula);
+    let high_contrast = s.theme_preset == "theme-obsidian";
+    drop(s);
+    let kind = HoloGlyphKind::for_stage(stage);
+
     rsx! {
         button {
             r#type: "button",
@@ -621,7 +719,17 @@ fn ManifoldCard(
             },
             div {
                 class: "cap",
-                span { class: "mark", aria_hidden: "true" }
+                span {
+                    class: "card-holo-glyph",
+                    aria_hidden: "true",
+                    HoloGlyphIcon {
+                        kind,
+                        active: false,
+                        animating,
+                        omega,
+                        high_contrast,
+                    }
+                }
                 b { "{name}" }
                 span { class: "pill plane", "{plane}" }
                 span { class: "pill live", "Live" }

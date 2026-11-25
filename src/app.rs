@@ -195,12 +195,26 @@ fn arm_omni_shortcut(mut state: Signal<ShellState>) {
             if event.state == ElementState::Pressed && !event.repeat =>
         {
             let held = modifiers.get();
-            if held.control_key()
-                && !held.alt_key()
-                && matches!(&event.logical_key, Key::Character(key) if key.eq_ignore_ascii_case("k"))
-                && !state.peek().launcher_open
-            {
-                state.write().launcher_open = true;
+            if held.control_key() && !held.alt_key() {
+                match &event.logical_key {
+                    Key::Character(key) if key.eq_ignore_ascii_case("k") => {
+                        if !state.peek().launcher_open {
+                            state.write().launcher_open = true;
+                        }
+                    }
+                    Key::Character(key) if key == "=" || key == "+" => {
+                        let next = (state.peek().ui_scale_percent + 10).min(175);
+                        state.write().ui_scale_percent = next;
+                    }
+                    Key::Character(key) if key == "-" || key == "_" => {
+                        let next = state.peek().ui_scale_percent.saturating_sub(10).max(85);
+                        state.write().ui_scale_percent = next;
+                    }
+                    Key::Character(key) if key == "0" => {
+                        state.write().ui_scale_percent = 115;
+                    }
+                    _ => {}
+                }
             }
         }
         _ => {}
@@ -462,6 +476,8 @@ pub fn App() -> Element {
     });
     arm_window_commands(state, bridge, care_authority);
     let s = state.read();
+    let ui_scale_percent = s.ui_scale_percent.clamp(85, 175);
+    let _ = aether_native::set_document_zoom(f32::from(ui_scale_percent) / 100.0);
     let status = if s.current_stage == crate::state::VolumeStage::None {
         format!("{} · {} · 42 MiB Sentinel", s.sku_label, s.gpu_label)
     } else {

@@ -690,6 +690,48 @@ fn box_distance(p: vec3<f32>, half_extent: vec3<f32>) -> f32 {
     return length(max(d, vec3(0.0))) + min(max(d.x, max(d.y, d.z)), 0.0);
 }
 
+fn smin_cubic(a: f32, b: f32, k: f32) -> f32 {
+    let h = max(k - abs(a - b), 0.0) / max(k, 0.0001);
+    return min(a, b) - h * h * h * k * (1.0 / 6.0);
+}
+
+fn torus_sdf(p: vec3<f32>, t: vec2<f32>) -> f32 {
+    let q = vec2(length(p.xz) - t.x, p.y);
+    return length(q) - t.y;
+}
+
+fn holo_scene_sdf(p: vec3<f32>, half_extent: vec3<f32>, harmonic: u32, mode: u32, phase: f32) -> f32 {
+    let scale = max(min(half_extent.x, min(half_extent.y, half_extent.z)), 0.25);
+    let q = p / scale;
+    let core = length(q) - 0.44;
+    let orbit_a = vec3(cos(phase) * 0.42, sin(phase * 0.7) * 0.24, sin(phase) * 0.42);
+    let orbit_b = vec3(-cos(phase * 0.8) * 0.38, -sin(phase) * 0.26, cos(phase * 0.8) * 0.38);
+    let sat_a = length(q - orbit_a) - 0.21;
+    let sat_b = length(q - orbit_b) - 0.19;
+    let ring_p = vec3(q.x, q.y * cos(0.45) - q.z * sin(0.45), q.y * sin(0.45) + q.z * cos(0.45));
+    let torus = torus_sdf(ring_p, vec2(0.58, 0.075));
+    var d = smin_cubic(core, smin_cubic(sat_a, sat_b, 0.24), 0.28);
+    if mode != 2u {
+        d = smin_cubic(d, torus, 0.16);
+    }
+    if harmonic >= 1u {
+        let freq = 4.0 + f32(harmonic) * 2.5;
+        let disp = 0.028 * f32(harmonic) * sin(q.x * freq + phase) * cos(q.y * freq - phase) * sin(q.z * freq);
+        d += disp;
+    }
+    return max(d * scale, box_distance(p, half_extent * 1.02));
+}
+
+fn estimate_normal(p: vec3<f32>, half_extent: vec3<f32>, harmonic: u32, mode: u32, phase: f32) -> vec3<f32> {
+    let e = vec2(0.004, -0.004);
+    return normalize(
+        e.xyy * holo_scene_sdf(p + e.xyy, half_extent, harmonic, mode, phase) +
+        e.yyx * holo_scene_sdf(p + e.yyx, half_extent, harmonic, mode, phase) +
+        e.yxy * holo_scene_sdf(p + e.yxy, half_extent, harmonic, mode, phase) +
+        e.xxx * holo_scene_sdf(p + e.xxx, half_extent, harmonic, mode, phase)
+    );
+}
+
 fn mobius(z: vec2<f32>, a: f32) -> vec2<f32> {
     let d = vec2(1.0 + a * z.x, a * z.y);
     let x = vec2(z.x + a, z.y);
@@ -716,9 +758,33 @@ fn mobius(z: vec2<f32>, a: f32) -> vec2<f32> {
     var ray_depth = -1.75;
     var wave = 0.0;
     var radial_depth = 0.0;
+    var sdf_lit = vec3(0.0);
+    var sdf_alpha = 0.0;
+    let ray_origin = inverse_orbit(vec3(uv / (0.27 * zoom), -2.0));
+    let ray_target = inverse_orbit(vec3(uv / (0.27 * zoom), 1.5));
+    let view_dir = normalize(ray_target - ray_origin);
     for (var hit = 0u; hit < step_budget; hit += 1u) {
         let p = inverse_orbit(vec3(uv / (0.27 * zoom), ray_depth));
         let distance = box_distance(p, half_extent);
+        let sdf_d = holo_scene_sdf(p, half_extent, harmonic, mode, phase);
+        if sdf_alpha < 0.95 && sdf_d < 0.012 {
+            let n = estimate_normal(p, half_extent, harmonic, mode, phase);
+            let light_dir = normalize(vec3(0.55, 0.78, -0.45));
+            let diff = max(dot(n, light_dir), 0.0);
+            let half_v = normalize(light_dir - view_dir);
+            let spec = pow(max(dot(n, half_v), 0.0), 28.0);
+            let fresnel = pow(1.0 - max(dot(n, -view_dir), 0.0), 2.6);
+            // Spherical Harmonics L0/L1 irradiance
+            let sh_irr = 0.52 + 0.28 * n.y + 0.18 * n.x - 0.12 * n.z;
+            let base_col = select(
+                vec3(0.14, 0.78, 0.72),
+                mix(vec3(0.38, 0.46, 0.96), vec3(0.98, 0.56, 0.38), clamp(length(p), 0.0, 1.0)),
+                mode == 2u
+            );
+            sdf_lit = base_col * (sh_irr * 0.55 + diff * 0.75)
+                + vec3(0.55, 0.92, 1.0) * (spec * 0.65 + fresnel * 0.52);
+            sdf_alpha = 1.0;
+        }
         if distance < 0.005 {
             let a = cos(length(p) * (5.0 + f32(harmonic) * 2.0) - phase);
             let b = cos(dot(p, vec3(3.5, 1.25, 2.0)) + phase);
@@ -726,7 +792,8 @@ fn mobius(z: vec2<f32>, a: f32) -> vec2<f32> {
             let unit_box = abs(p) / max(half_extent, vec3(0.002));
             radial_depth = max(radial_depth, clamp(1.0 - length(unit_box) * 0.57735, 0.0, 1.0));
         }
-        ray_depth += max(max(distance, 0.0), 3.5 / f32(step_budget));
+        let step_len = min(max(distance, 0.0), max(sdf_d * 0.75, 0.02));
+        ray_depth += max(step_len, 3.5 / f32(step_budget));
         if ray_depth > 1.75 { break; }
     }
     let width_px = 1.0 / extent;
@@ -764,6 +831,7 @@ fn mobius(z: vec2<f32>, a: f32) -> vec2<f32> {
         wire = max(wire, (1.0 - smoothstep(width_px * 0.35, width_px * 1.35, distance)) * 0.4);
     }
     var rgb = vec3(0.050, 0.067, 0.118) + vec3(0.12, 0.06, 0.19) * wave * (0.5 + sigma);
+    rgb = mix(rgb, sdf_lit, sdf_alpha * 0.88);
     var ring_color = vec3(0.55, 0.49, 1.0);
     if mode == 2u {
         ring_color = mix(vec3(0.48, 0.39, 1.0), vec3(1.0, 0.58, 0.40), radial_depth);
