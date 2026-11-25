@@ -2,6 +2,7 @@ mod app;
 mod components;
 mod state;
 mod tray;
+pub mod uat;
 
 use aether::prelude::*;
 use app::App;
@@ -24,6 +25,9 @@ fn main() {
     // Handle CLI subcommands:
     // 1. `webizen-os-shell update check|verify|upgrade|apply [candidate_path]` (C7 / KD-16)
     // 2. `webizen-os-shell package-dual-sku` (C6 Guest bundle + D5/F4 Debian Trixie overlay + A7 LICENSE-BOUNDARY)
+    // 3. `webizen-os-shell uat [stage_filter]` (Automated live-window UAT button sweep)
+    // 4. `webizen-os-shell uat-mcp` (MCP JSON-RPC 2.0 server over stdio)
+    // 5. `webizen-os-shell uat-cmd <snapshot|press|input|stage|suite> ...` (CLI client to live window)
     if let Some(first) = args.first().map(|s| s.as_str()) {
         if first == "update" {
             let action = args
@@ -84,10 +88,54 @@ fn main() {
                     std::process::exit(1);
                 }
             }
+        } else if first == "uat-mcp" {
+            uat::run_mcp_stdio_server();
+            std::process::exit(0);
+        } else if first == "uat-cmd" {
+            let port: u16 = std::env::var("WEBIZEN_UAT_PORT")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(4249);
+            let sub = args.get(1).map(|s| s.as_str()).unwrap_or("snapshot");
+            let cmd = match sub {
+                "press" | "click" => uat::UatCommand::PressButton {
+                    target: args.get(2).cloned().unwrap_or_default(),
+                },
+                "input" => uat::UatCommand::SetInput {
+                    target: args.get(2).cloned().unwrap_or_default(),
+                    value: args.get(3).cloned().unwrap_or_default(),
+                },
+                "stage" => uat::UatCommand::SwitchStage {
+                    stage: args.get(2).cloned().unwrap_or_else(|| "none".into()),
+                },
+                "suite" => uat::UatCommand::RunSuite {
+                    stage_filter: args.get(2).cloned(),
+                },
+                _ => uat::UatCommand::Snapshot,
+            };
+            match uat::send_remote_uat_command(port, &cmd) {
+                Ok(resp) => {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&resp).unwrap_or_default()
+                    );
+                    std::process::exit(if resp.ok { 0 } else { 1 });
+                }
+                Err(e) => {
+                    eprintln!("uat-cmd failed: {e}");
+                    std::process::exit(1);
+                }
+            }
+        } else if first == "uat" {
+            std::env::set_var("WEBIZEN_UAT_AUTO", "1");
+            if let Some(stage_filter) = args.get(1) {
+                std::env::set_var("WEBIZEN_UAT_STAGE", stage_filter);
+            }
         }
     }
 
-    if !smoke {
+    let uat_auto = std::env::var("WEBIZEN_UAT_AUTO").ok().as_deref() == Some("1");
+    if !smoke && !uat_auto {
         match session.host.ensure_daemon(session.sku) {
             Ok(h) => eprintln!(
                 "C0 daemon: reachable={} port={} {}",
@@ -100,7 +148,7 @@ fn main() {
     }
     init_session(session);
 
-    if !smoke {
+    if !smoke && !uat_auto {
         if let Err(e) = tray::install() {
             eprintln!("C0 tray: {e}");
         }

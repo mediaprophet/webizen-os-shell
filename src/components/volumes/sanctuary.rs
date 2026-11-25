@@ -249,9 +249,10 @@ pub fn SanctuaryVolume(mut state: Signal<ShellState>) -> Element {
                 form {
                     onsubmit: move |event| {
                         event.prevent_default();
+                        let shares = selected_shares.read().clone();
                         let result = simulate_shamir_recovery_ceremony(
                             &mut state.write().sanctuary_onboarding,
-                            &selected_shares.read(),
+                            &shares,
                         );
                         recovery_error.set(result.err().unwrap_or_default());
                     },
@@ -320,10 +321,12 @@ pub fn SanctuaryVolume(mut state: Signal<ShellState>) -> Element {
                     form {
                         onsubmit: move |event| {
                             event.prevent_default();
+                            let did = mobile_did.read().clone();
+                            let endpoint = wireguard_endpoint.read().clone();
                             let result = pair_and_test_pocket_cosigner(
                                 &mut state.write().sanctuary_onboarding,
-                                &mobile_did.read(),
-                                &wireguard_endpoint.read(),
+                                &did,
+                                &endpoint,
                             );
                             pairing_notice.set(match result {
                                 Ok(receipt) => receipt,

@@ -425,6 +425,7 @@ pub fn App() -> Element {
     arm_omni_shortcut(state);
     arm_renderer_health(state);
     arm_background_jobs(state);
+    crate::uat::arm_uat_harness(state);
     let adopted = use_signal(|| None::<AdoptedQualiaFoundation>);
     let has_adopted_scope = adopted.read().is_some();
     let refract_store = use_refract_store(|| {
@@ -477,6 +478,7 @@ pub fn App() -> Element {
     } else {
         format!("webizen-shell-root shell {}", s.theme_preset)
     };
+    drop(s);
 
     rsx! {
         style { "{SHELL_CSS}" }
