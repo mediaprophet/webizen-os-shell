@@ -10,6 +10,16 @@
 
 ---
 
+## 0. The Core Product Rule: "Build the Application, Not an Engine-Diagnostics Readout"
+
+1. **Never Mistake Specification Telemetry for the User Interface:** Dumping internal struct fields, DIDs, SHA3 hashes, and "Simulate Receipt" buttons onto the primary user screen as `<dl class="kv">` tables produces an engineering diagnostic readout, not a product.
+2. **Apps Must Be Real Working Workspaces (90% Canvas / Content, 0% Jargon):**
+   - Clicking **Browser** must open an actual browser toolbar + full-stage viewport embedding `ChoraFrameWidget` (`chora-worker` for `https://`) or the full-bleed 3D `Holo10dViewport` (`qualia://`), with a clear status state if `chora-worker` is not yet built/connected.
+   - Clicking **Poet**, **Talk**, **Mail**, **Library**, **Keep**, **WellFair**, or **Wallet** must open the functional human workspace first, using plain human language.
+3. **Move Architecture Telemetry into the `F12` / `Inspect` Developer Drawer (`WP-ETALON-00A..00B`):** Keep all `NQuin48` parity proofs, `RouteStamp` counters, DID bindings, and SHACL receipts accessible inside a collapsible `F12` Developer & Continuity Inspector drawer.
+
+---
+
 ## 1. Architectural Thesis: Why VibeScript Semantic Backend + Spatial Theme Cartridges Replaces CSS
 
 In traditional HTML/CSS toolkits, a "theme" is merely a set of color/font tokens applied to a static 2D DOM box tree (`<div>`, `<button>`). CSS variables can change colors, but they cannot transform a 2D sidebar into:
@@ -29,8 +39,10 @@ In traditional HTML/CSS toolkits, a "theme" is merely a set of color/font tokens
 
 ---
 
-## 2. Work-Packet Register (`WP-ETALON-01` .. `WP-ETALON-12`)
+## 2. Work-Packet Register (`WP-ETALON-00A` .. `WP-ETALON-12`)
 
+- **`WP-ETALON-00A`**: Jargon Purge, Plain-Language App Launcher & `F12` Developer Diagnostics Drawer (`src/components/dev_inspector.rs`, `stage_host.rs`, `halo_bar.rs`).
+- **`WP-ETALON-00B`**: Real App Workspace Hosting — Full-Viewport Browser (`ChoraFrameWidget` + full-bleed `Holo10dViewport`) & Workspace-First Volume Layouts (`browser.rs`, `poet_synth.rs`, `communications.rs`, `library.rs`).
 - **`WP-ETALON-01`**: Semantic UI Scene-Graph (`SemanticSceneGraph`, `SemanticUiNode`) & Typed `SemanticIntentBus` Projection (`crates/webizen-ua-os/src/semantic_scene_graph.rs`).
 - **`WP-ETALON-02`**: VibeScript Theme Cartridge Contract (`.vibe` + `N3`/`SHACL` + `ThemeCartridgeRegistry` with 6 built-in cartridges in `crates/webizen-ua-os/src/theme_cartridge.rs` & `aether-qualia-host`).
 - **`WP-ETALON-03`**: Live VibeScript Theme Studio & Hot-Reload Inspector in `Settings -> 6. Appearance & Access` and `Poet & Synth`.
