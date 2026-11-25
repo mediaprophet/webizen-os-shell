@@ -1,3 +1,5 @@
+#![cfg_attr(not(test), windows_subsystem = "windows")]
+
 mod app;
 mod components;
 mod state;
@@ -17,8 +19,25 @@ fn root() -> Element {
     rsx! { App {} }
 }
 
+fn attach_parent_console_for_cli() {
+    #[cfg(windows)]
+    {
+        #[link(name = "kernel32")]
+        extern "system" {
+            fn AttachConsole(dw_process_id: u32) -> i32;
+        }
+        const ATTACH_PARENT_PROCESS: u32 = 0xFFFF_FFFF;
+        unsafe {
+            let _ = AttachConsole(ATTACH_PARENT_PROCESS);
+        }
+    }
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    if !args.is_empty() || std::env::var("WEBIZEN_C1_SMOKE").ok().as_deref() == Some("1") {
+        attach_parent_console_for_cli();
+    }
     let smoke = std::env::var("WEBIZEN_C1_SMOKE").ok().as_deref() == Some("1");
     let session = DeviceSession::resolve();
 

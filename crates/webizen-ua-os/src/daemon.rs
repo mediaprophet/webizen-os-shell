@@ -94,6 +94,15 @@ pub fn ensure_daemon(host: &LoopbackHost, sku: Sku) -> Result<DaemonHandle, Daem
     cmd.arg("--port").arg(host.port.to_string());
     cmd.env("QUALIA_STORAGE_PATH", &host.storage);
     cmd.env("QUALIA_DATA_DIR", &host.storage);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    cmd.stdin(std::process::Stdio::null());
+    cmd.stdout(std::process::Stdio::null());
+    cmd.stderr(std::process::Stdio::null());
 
     let status = cmd
         .status()

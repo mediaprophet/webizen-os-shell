@@ -163,28 +163,32 @@ pub fn StageHost(mut state: Signal<ShellState>) -> Element {
                 role: "region",
                 aria_label: "GPU and renderer health",
                 div {
-                    h3 { "GPU Stage · Renderer Health" }
-                    p {
-                        "Adapter: "
-                        span { class: "pill plane", "NATIVE_DESKTOP" }
-                        " — {gpu} · NQuin48 wire parity: {parity_str} · {providers} native Vibe providers · 150 hypermedia.* morphisms."
+                    class: "gpu-inline-summary",
+                    strong { "GPU Stage: " }
+                    span { class: "pill plane", "NATIVE_DESKTOP" }
+                    span {
+                        " {gpu} · {renderer.backend_label} · NQuin48: {parity_str} · {providers} Vibe providers · {width}×{height} px"
+                    }
+                    if !orb_toast.is_empty() {
+                        span { class: "pill plane", "{orb_toast}" }
                     }
                 }
-                dl {
-                    class: "renderer-health",
-                    dt { "Backend" }
-                    dd { "{renderer.backend_label}" }
-                    dt { "Fallback policy" }
-                    dd { "{renderer.fallback_policy_label}" }
-                    dt { "Fallback engaged" }
-                    dd { if renderer.fallback_engaged { "Yes" } else { "No" } }
-                    dt { "HOLO surface" }
-                    dd { "{renderer.active_holo_surface_status}" }
-                    dt { "Viewport" }
-                    dd { "{width} × {height} px" }
-                }
-                if !orb_toast.is_empty() {
-                    span { class: "pill plane", "{orb_toast}" }
+                details {
+                    class: "gpu-details-pop",
+                    summary { "Renderer Details" }
+                    dl {
+                        class: "renderer-health",
+                        dt { "Backend" }
+                        dd { "{renderer.backend_label}" }
+                        dt { "Fallback policy" }
+                        dd { "{renderer.fallback_policy_label}" }
+                        dt { "Fallback engaged" }
+                        dd { if renderer.fallback_engaged { "Yes" } else { "No" } }
+                        dt { "HOLO surface" }
+                        dd { "{renderer.active_holo_surface_status}" }
+                        dt { "Viewport" }
+                        dd { "{width} × {height} px" }
+                    }
                 }
             }
             if control_center_open {

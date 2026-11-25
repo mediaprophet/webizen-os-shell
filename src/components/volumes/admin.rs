@@ -16,13 +16,50 @@ use webizen_ua_os::{
     UpdateAction,
 };
 
-#[component]
-pub fn AdminVolume(state: Signal<ShellState>) -> Element {
-    rsx! { HostStewardshipAndFleetPanel { state } }
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum AdminSubTab {
+    FleetAndDebSuite,
+    StewardsAndQuorum,
+    ProjectsAndJuralGate,
 }
 
 #[component]
-pub fn HostStewardshipAndFleetPanel(mut state: Signal<ShellState>) -> Element {
+pub fn AdminVolume(state: Signal<ShellState>) -> Element {
+    let mut active_tab = use_signal(|| AdminSubTab::FleetAndDebSuite);
+    let tab = active_tab();
+    rsx! {
+        div {
+            class: "settings-volume",
+            div {
+                class: "volume-subtabs",
+                role: "tablist",
+                aria_label: "Admin & Fleet Stewardship sections",
+                button {
+                    r#type: "button",
+                    class: if tab == AdminSubTab::FleetAndDebSuite { "ribbon-btn active" } else { "ribbon-btn" },
+                    onclick: move |_| active_tab.set(AdminSubTab::FleetAndDebSuite),
+                    "1. Fleet Nodes, Daemon, 3-Node Mesh & Debian 13 .deb Suite"
+                }
+                button {
+                    r#type: "button",
+                    class: if tab == AdminSubTab::StewardsAndQuorum { "ribbon-btn active" } else { "ribbon-btn" },
+                    onclick: move |_| active_tab.set(AdminSubTab::StewardsAndQuorum),
+                    "2. Natural-Person Stewards & M-of-N Update Quorum"
+                }
+                button {
+                    r#type: "button",
+                    class: if tab == AdminSubTab::ProjectsAndJuralGate { "ribbon-btn active" } else { "ribbon-btn" },
+                    onclick: move |_| active_tab.set(AdminSubTab::ProjectsAndJuralGate),
+                    "3. Hosted Workloads, Q-CDN Swarm & Jural Commercial Gate"
+                }
+            }
+            HostStewardshipAndFleetPanel { state, tab }
+        }
+    }
+}
+
+#[component]
+fn HostStewardshipAndFleetPanel(mut state: Signal<ShellState>, tab: AdminSubTab) -> Element {
     let mut fleet_notice = use_signal(String::new);
     let store = try_consume_context::<RefractStore<WebizenRefractModel>>();
     let store_fleet = store.clone();
@@ -90,15 +127,17 @@ pub fn HostStewardshipAndFleetPanel(mut state: Signal<ShellState>) -> Element {
             if !input_guard.is_empty() {
                 p { class: "muted", role: "status", "{input_guard}" }
             }
-            ApplianceProfilesPanel { state }
-            HostDaemonPanel { state }
-            MeshSimulationPanel { state }
             if !toast.is_empty() {
                 p { class: "path", "{toast}" }
             }
 
-            // 1. Tri-Target Debian 13 (Trixie) .deb Packaging Matrix (Desktop amd64 + Mobile AVF arm64 + Host amd64)
-            section {
+            if tab == AdminSubTab::FleetAndDebSuite {
+                ApplianceProfilesPanel { state }
+                HostDaemonPanel { state }
+                MeshSimulationPanel { state }
+
+                // 1. Tri-Target Debian 13 (Trixie) .deb Packaging Matrix (Desktop amd64 + Mobile AVF arm64 + Host amd64)
+                section {
                 class: "id-list",
                 h4 { "Tri-Target Debian 13 (Trixie) .deb Packaging Architecture (Single Rust Workspace -> Desktop, Mobile AVF pKVM EL2 & Host)" }
                 div {
@@ -165,7 +204,9 @@ pub fn HostStewardshipAndFleetPanel(mut state: Signal<ShellState>) -> Element {
                     p { class: "path", "Delivery: {delivery}" }
                 }
             }
+            }
 
+            if tab == AdminSubTab::StewardsAndQuorum {
             // 2. Four Human-Centric Stewardship Archetypes Switcher
             section {
                 class: "id-list",
@@ -648,7 +689,9 @@ pub fn HostStewardshipAndFleetPanel(mut state: Signal<ShellState>) -> Element {
                     }
                 }
             }
+            }
 
+            if tab == AdminSubTab::ProjectsAndJuralGate {
             // 7. Server Runtime Responsibility vs Hosted Project / Website / Domain Stewardship & Q-CDN Swarm Lifecycle
             section {
                 class: "id-list",
@@ -896,6 +939,7 @@ pub fn HostStewardshipAndFleetPanel(mut state: Signal<ShellState>) -> Element {
                         }
                     }
                 }
+            }
             }
         }
     }

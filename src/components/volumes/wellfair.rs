@@ -20,12 +20,55 @@ use webizen_ua_os::{
     PocketCosignerActionKind, SharedLivingAndCareTopologyKind, SpecialistDomainScope,
 };
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum WellfairSubTab {
+    CaseworkAndPortal,
+    GuardianshipAndCare,
+    FairnessReview,
+}
+
 #[component]
 pub fn WellfairVolume(state: Signal<ShellState>) -> Element {
+    let mut active_tab = use_signal(|| WellfairSubTab::CaseworkAndPortal);
+    let tab = active_tab();
     rsx! {
-        FairnessDraftPanel {}
-        WellfairHumanRightsAndSpecialistPortalPanel { state }
-        GuardianshipAndCarePanel { state }
+        div {
+            class: "settings-volume",
+            div {
+                class: "volume-subtabs",
+                role: "tablist",
+                aria_label: "WellFair workspace sections",
+                button {
+                    r#type: "button",
+                    class: if tab == WellfairSubTab::CaseworkAndPortal { "ribbon-btn active" } else { "ribbon-btn" },
+                    onclick: move |_| active_tab.set(WellfairSubTab::CaseworkAndPortal),
+                    "1. Casework, Instruments & Specialist Portal"
+                }
+                button {
+                    r#type: "button",
+                    class: if tab == WellfairSubTab::GuardianshipAndCare { "ribbon-btn active" } else { "ribbon-btn" },
+                    onclick: move |_| active_tab.set(WellfairSubTab::GuardianshipAndCare),
+                    "2. Shared Living, Guardianship & Remote Carer Alerts"
+                }
+                button {
+                    r#type: "button",
+                    class: if tab == WellfairSubTab::FairnessReview { "ribbon-btn active" } else { "ribbon-btn" },
+                    onclick: move |_| active_tab.set(WellfairSubTab::FairnessReview),
+                    "3. Six-Dimension Fairness & Rights Review"
+                }
+            }
+            match tab {
+                WellfairSubTab::CaseworkAndPortal => rsx! {
+                    WellfairHumanRightsAndSpecialistPortalPanel { state }
+                },
+                WellfairSubTab::GuardianshipAndCare => rsx! {
+                    GuardianshipAndCarePanel { state }
+                },
+                WellfairSubTab::FairnessReview => rsx! {
+                    FairnessDraftPanel {}
+                },
+            }
+        }
     }
 }
 
