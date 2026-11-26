@@ -95,10 +95,17 @@ impl PersistedWorkspaceSnapshot {
         ) {
             return Err("Unknown workspace chrome mode");
         }
-        if !matches!(
-            self.theme_preset.as_str(),
-            "theme-holosonic" | "theme-obsidian" | "theme-commons"
-        ) {
+        let theme = self.theme_preset.as_str();
+        if !(matches!(
+            theme,
+            "theme-holosonic"
+                | "theme-obsidian"
+                | "theme-commons"
+                | "theme-holoslate"
+                | "theme-cyber-grid"
+                | "theme-spatial-commons"
+        ) || theme.starts_with("custom-theme-"))
+        {
             return Err("Unknown workspace theme");
         }
         if !(85..=175).contains(&self.ui_scale_percent) {

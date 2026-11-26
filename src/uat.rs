@@ -1,8 +1,11 @@
+// Copyright (c) 2026 Timothy Charles Holborn.
+// SPDX-License-Identifier: CC-BY-NC-ND-4.0
+
 //! Webizen OS-Shell Automated User Acceptance Testing (UAT), Live Window Driver,
 //! HTTP JSON Automation Server, and MCP (Model Context Protocol) JSON-RPC Server.
 
 use crate::state::{
-    SettingsSection, ShellState, VolumeStage, ALL_SETTINGS_SECTIONS,
+    DevInspectorTab, SettingsSection, ShellState, VolumeStage, ALL_SETTINGS_SECTIONS,
 };
 use aether::prelude::*;
 use aether_native::winit::event::WindowEvent;
@@ -331,6 +334,8 @@ enum UatSweepScope {
     ControlCenterDrawer,
     CommandOrbOverlay,
     SettingsTab(SettingsSection),
+    DevInspector(DevInspectorTab),
+    ThemeCartridge(&'static str),
 }
 
 impl UatSweepScope {
@@ -341,6 +346,8 @@ impl UatSweepScope {
             Self::ControlCenterDrawer => "OS Control Center Drawer".to_string(),
             Self::CommandOrbOverlay => "Poet 8-Sector Command Orb".to_string(),
             Self::SettingsTab(sec) => format!("Settings · {}", sec.label()),
+            Self::DevInspector(tab) => format!("Inspect · {}", tab.label()),
+            Self::ThemeCartridge(id) => format!("Theme · {id}"),
         }
     }
 
@@ -348,6 +355,8 @@ impl UatSweepScope {
         s.launcher_open = false;
         s.control_center_drawer_open = false;
         s.orb_open = false;
+        s.dev_inspector_open = false;
+        s.inspect_continuity_open = false;
         match *self {
             Self::Stage(stage) => {
                 s.current_stage = stage;
@@ -367,6 +376,16 @@ impl UatSweepScope {
             Self::SettingsTab(sec) => {
                 s.current_stage = VolumeStage::Settings;
                 s.settings_section = sec;
+            }
+            Self::DevInspector(tab) => {
+                s.current_stage = VolumeStage::None;
+                s.dev_inspector_open = true;
+                s.inspect_continuity_open = true;
+                s.dev_inspector_tab = tab;
+            }
+            Self::ThemeCartridge(id) => {
+                s.current_stage = VolumeStage::None;
+                let _ = s.adopt_theme(id);
             }
         }
     }
@@ -434,6 +453,16 @@ fn build_sweep_scopes(stage_filter: Option<&str>) -> VecDeque<UatSweepScope> {
                 .map(UatSweepScope::SettingsTab)
                 .collect();
         }
+        if lower == "inspect" || lower == "inspector" {
+            return DevInspectorTab::ALL
+                .iter()
+                .copied()
+                .map(UatSweepScope::DevInspector)
+                .collect();
+        }
+        if lower == "themes" || lower == "--all-themes" {
+            return build_all_themes_scopes();
+        }
         if let Some(st) = parse_stage(f) {
             return VecDeque::from([UatSweepScope::Stage(st)]);
         }
@@ -451,6 +480,26 @@ fn build_sweep_scopes(stage_filter: Option<&str>) -> VecDeque<UatSweepScope> {
     scopes.push_back(UatSweepScope::LauncherOverlay);
     scopes.push_back(UatSweepScope::ControlCenterDrawer);
     scopes.push_back(UatSweepScope::CommandOrbOverlay);
+    scopes
+}
+
+const ALL_THEME_CARTRIDGES: [&str; 6] = [
+    "theme-holosonic",
+    "theme-obsidian",
+    "theme-commons",
+    "theme-holoslate",
+    "theme-cyber-grid",
+    "theme-spatial-commons",
+];
+
+fn build_all_themes_scopes() -> VecDeque<UatSweepScope> {
+    let mut scopes = build_sweep_scopes(None);
+    for tab in DevInspectorTab::ALL {
+        scopes.push_back(UatSweepScope::DevInspector(tab));
+    }
+    for id in ALL_THEME_CARTRIDGES {
+        scopes.push_back(UatSweepScope::ThemeCartridge(id));
+    }
     scopes
 }
 
@@ -625,7 +674,14 @@ pub fn arm_uat_harness(mut state: Signal<ShellState>) {
                 stage_filter,
                 reply,
             } => {
-                let mut scopes = build_sweep_scopes(stage_filter.as_deref());
+                let mut scopes = if std::env::var("WEBIZEN_UAT_ALL_THEMES").ok().as_deref()
+                    == Some("1")
+                    && stage_filter.is_none()
+                {
+                    build_all_themes_scopes()
+                } else {
+                    build_sweep_scopes(stage_filter.as_deref())
+                };
                 if let Some(first) = scopes.pop_front() {
                     eprintln!("[UAT] Starting automated live-window button sweep...");
                     first.apply_to_state(&mut state.write());
@@ -691,6 +747,15 @@ pub fn arm_uat_harness(mut state: Signal<ShellState>) {
                                         && el.id.as_deref() != Some("open-launcher")
                                 }
                                 UatSweepScope::Stage(_) => {
+                                    !class.contains("fav")
+                                        && !class.contains("ribbon-btn")
+                                        && el.id.as_deref() != Some("open-launcher")
+                                }
+                                UatSweepScope::DevInspector(_) => {
+                                    !class.contains("fav")
+                                        && el.id.as_deref() != Some("open-launcher")
+                                }
+                                UatSweepScope::ThemeCartridge(_) => {
                                     !class.contains("fav")
                                         && !class.contains("ribbon-btn")
                                         && el.id.as_deref() != Some("open-launcher")
@@ -1266,6 +1331,8 @@ mod tests {
         assert_eq!(build_sweep_scopes(Some("launcher")).len(), 1);
         assert_eq!(build_sweep_scopes(Some("control-center")).len(), 1);
         assert_eq!(build_sweep_scopes(Some("orb")).len(), 1);
+        assert_eq!(build_sweep_scopes(Some("inspect")).len(), 4);
+        assert_eq!(build_all_themes_scopes().len(), 37);
     }
 }
 

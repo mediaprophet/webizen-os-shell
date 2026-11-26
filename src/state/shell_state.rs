@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Timothy Charles Holborn.
+// SPDX-License-Identifier: CC-BY-NC-ND-4.0
+
 use aether::refract::{
     self, AssertionEvidenceLevel, AssertionKind, BitemporalStamp, ChallengeState,
     ContextualAssertionView, ContributionStage, ContributionStageView, DimensionOutcome,
@@ -6,21 +9,23 @@ use aether::refract::{
 use aether::refract_bridge::RefractStore;
 use std::sync::OnceLock;
 use webizen_ua_os::{
-    build_desktop_appliance_profile, build_sanctuary_onboarding_state,
-    core_semantic_instruments_catalog, inspect_browser_product, load_workspace_snapshot,
-    poet_analyze_and_seal_gazetteer, poet_eval_native_cell, poet_open_lexicon_pack,
-    probe_mobile_avf_sanctuary, probe_only, q_hash_60, sync_fleet_from_fabric,
-    AuthoringWorkflowSnapshot, BrowserExecutionMode, BrowserProductStatus, BrowserSocialGraph,
-    CapabilityLeaseScope, ChoraWorkerSupervisorSnapshot, DesktopApplianceProfile, DeviceSession,
-    GovernedVibeActionReport, HierarchicalOrchestratorState, HoloShaderVisualizationMode,
-    HostDaemonStatusSnapshot, HybridBridgeReceipt, HypermediaProduceReceipt, IdentifierFabricPlane,
-    LaunchPlan, LlmAndAgentManagementRegistry, LocalLlmModelEntry, LocalModelReadinessReceipt,
-    MobileAvfSanctuaryProfile, NativeGpuAdapterInfo, NaturalHostStewardshipFabric,
-    OsControlCenterState, OsEnvironment, PersistedWorkspaceSnapshot, PoetCellEntry,
-    PoetGazetteerResult, QappRegistryEntry, QecpCredentialEnvelope, SanctuaryOnboardingState,
-    SemanticFacetFilter, SemanticFileSystem, SemanticToolboxId, ShamirQ42jBackupArchive,
-    ShellRendererHealthSummary, Sku, SolidTurtleSyncReceipt, ThreeNodeMeshSimulationReceipt,
-    UaOsHost, WellfairSpecialistPortalState,
+    apply_semantic_intent as apply_graph_intent, build_desktop_appliance_profile,
+    build_sanctuary_onboarding_state, core_semantic_instruments_catalog, inspect_browser_product,
+    load_workspace_snapshot, poet_analyze_and_seal_gazetteer, poet_eval_native_cell,
+    poet_open_lexicon_pack, probe_mobile_avf_sanctuary, probe_only, project_core_volume_graph,
+    q_hash_60, sync_fleet_from_fabric, AuthoringWorkflowSnapshot, BrowserExecutionMode,
+    BrowserProductStatus, BrowserSocialGraph, CapabilityLeaseScope, ChoraWorkerSupervisorSnapshot,
+    DesktopApplianceProfile, DeviceSession, GovernedVibeActionReport, HierarchicalOrchestratorState,
+    HoloShaderVisualizationMode, HostDaemonStatusSnapshot, HybridBridgeReceipt,
+    HypermediaProduceReceipt, IdentifierFabricPlane, LaunchPlan, LlmAndAgentManagementRegistry,
+    LocalLlmModelEntry, LocalModelReadinessReceipt, MobileAvfSanctuaryProfile, NativeGpuAdapterInfo,
+    NaturalHostStewardshipFabric, OsControlCenterState, OsEnvironment, PersistedWorkspaceSnapshot,
+    PoetCellEntry, PoetGazetteerResult, QappRegistryEntry, QecpCredentialEnvelope,
+    RecommendedEnvironmentOption, SanctuaryOnboardingState, SemanticFacetFilter, SemanticFileSystem,
+    SemanticIntent, SemanticSceneGraph, SemanticToolboxId, ShamirQ42jBackupArchive,
+    SharedThemeCartridgeBundle, ShellRendererHealthSummary, Sku, SolidTurtleSyncReceipt,
+    ThemeCartridgeManifest, ThemeCartridgeRegistry, ThreeNodeMeshSimulationReceipt, UaOsHost,
+    UserEnvironmentQuestionnaire, WellfairSpecialistPortalState,
 };
 
 static SESSION: OnceLock<DeviceSession> = OnceLock::new();
@@ -129,6 +134,34 @@ pub enum StageChromeMode {
     DefaultDepth,
     FullStage,
     FloatLayer,
+}
+
+/// Tabs of the F12 Developer & Continuity Inspector Drawer.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum DevInspectorTab {
+    #[default]
+    ContinuityAndFourPlanes,
+    GpuAndEtalonRenderer,
+    NQuin48AndRefractStore,
+    WorkersAndCapabilityLeases,
+}
+
+impl DevInspectorTab {
+    pub const ALL: [Self; 4] = [
+        Self::ContinuityAndFourPlanes,
+        Self::GpuAndEtalonRenderer,
+        Self::NQuin48AndRefractStore,
+        Self::WorkersAndCapabilityLeases,
+    ];
+
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::ContinuityAndFourPlanes => "Continuity & Four Planes",
+            Self::GpuAndEtalonRenderer => "GPU & Etalon Renderer",
+            Self::NQuin48AndRefractStore => "NQuin48 & Refract Store",
+            Self::WorkersAndCapabilityLeases => "Workers & Capability Leases",
+        }
+    }
 }
 
 const STEWARDSHIP_SLOT_START: usize = 4;
@@ -361,9 +394,21 @@ pub struct ShellState {
     pub settings_search: String,
     pub orb_open: bool,
     pub inspect_continuity_open: bool,
+    pub dev_inspector_open: bool,
+    pub dev_inspector_tab: DevInspectorTab,
     pub stage_chrome_mode: StageChromeMode,
     pub orb_toast: String,
     pub theme_preset: &'static str,
+    pub theme_registry: ThemeCartridgeRegistry,
+    pub environment_questionnaire: UserEnvironmentQuestionnaire,
+    pub recommended_environments: Option<[RecommendedEnvironmentOption; 3]>,
+    pub theme_codesign_prompt: String,
+    pub theme_codesign_status: String,
+    pub collected_themes: Vec<SharedThemeCartridgeBundle>,
+    pub custom_theme_vibe: String,
+    pub last_picked_semantic_id: Option<u64>,
+    pub bookmarks_drawer_open: bool,
+    pub browser_engine_drawer_open: bool,
     pub reduced_motion: bool,
     pub ui_scale_percent: u16,
     pub animate_icons: bool,
@@ -520,9 +565,21 @@ impl ShellState {
             settings_search: String::new(),
             orb_open: false,
             inspect_continuity_open: false,
+            dev_inspector_open: false,
+            dev_inspector_tab: DevInspectorTab::ContinuityAndFourPlanes,
             stage_chrome_mode: StageChromeMode::DefaultDepth,
             orb_toast: String::new(),
             theme_preset: "theme-holosonic",
+            theme_registry: ThemeCartridgeRegistry::with_builtins(),
+            environment_questionnaire: UserEnvironmentQuestionnaire::default(),
+            recommended_environments: None,
+            theme_codesign_prompt: String::new(),
+            theme_codesign_status: String::new(),
+            collected_themes: Vec::new(),
+            custom_theme_vibe: String::new(),
+            last_picked_semantic_id: None,
+            bookmarks_drawer_open: false,
+            browser_engine_drawer_open: false,
             reduced_motion: false,
             ui_scale_percent: 115,
             animate_icons: true,
@@ -743,9 +800,21 @@ impl ShellState {
             settings_search: String::new(),
             orb_open: false,
             inspect_continuity_open: false,
+            dev_inspector_open: false,
+            dev_inspector_tab: DevInspectorTab::ContinuityAndFourPlanes,
             stage_chrome_mode: StageChromeMode::DefaultDepth,
             orb_toast: String::new(),
             theme_preset: "theme-holosonic",
+            theme_registry: ThemeCartridgeRegistry::with_builtins(),
+            environment_questionnaire: UserEnvironmentQuestionnaire::default(),
+            recommended_environments: None,
+            theme_codesign_prompt: String::new(),
+            theme_codesign_status: String::new(),
+            collected_themes: Vec::new(),
+            custom_theme_vibe: String::new(),
+            last_picked_semantic_id: None,
+            bookmarks_drawer_open: false,
+            browser_engine_drawer_open: false,
             reduced_motion: false,
             ui_scale_percent: 115,
             animate_icons: true,
@@ -946,8 +1015,15 @@ impl ShellState {
         self.theme_preset = match snap.theme_preset.as_str() {
             "theme-obsidian" => "theme-obsidian",
             "theme-commons" => "theme-commons",
+            "theme-holoslate" => "theme-holoslate",
+            "theme-cyber-grid" => "theme-cyber-grid",
+            "theme-spatial-commons" => "theme-spatial-commons",
+            id if id.starts_with("custom-theme-") => "custom-theme",
             _ => "theme-holosonic",
         };
+        if self.theme_registry.get(&snap.theme_preset).is_some() {
+            self.theme_registry.active_id = snap.theme_preset.clone();
+        }
         self.reduced_motion = snap.reduced_motion;
         self.ui_scale_percent = if (85..=175).contains(&snap.ui_scale_percent) {
             snap.ui_scale_percent
@@ -988,10 +1064,98 @@ impl ShellState {
         sync_fleet_from_fabric(&mut self.desktop_appliance, &self.host_stewardship);
         self.host_daemon_snapshot = HostDaemonStatusSnapshot::from_fabric(&self.host_stewardship);
     }
+
+    pub fn active_cartridge(&self) -> &ThemeCartridgeManifest {
+        self.theme_registry
+            .active()
+            .or_else(|| self.theme_registry.cartridges.first())
+            .expect("built-in theme cartridges are always present")
+    }
+
+    pub fn project_semantic_scene_graph(&self) -> SemanticSceneGraph {
+        let mut graph = project_core_volume_graph();
+        if self.current_stage != VolumeStage::None {
+            if let Some(node) = graph.nodes.iter().find(|node| {
+                matches!(
+                    &node.primary_intent,
+                    SemanticIntent::OpenVolume { stage_slug }
+                        if *stage_slug == self.current_stage.workspace_slug()
+                )
+            }) {
+                graph.active_semantic_id = Some(node.semantic_id);
+            }
+        }
+        graph
+    }
+
+    pub fn apply_semantic_intent(&mut self, intent: &SemanticIntent) -> Result<(), String> {
+        let mut graph = self.project_semantic_scene_graph();
+        let applied = apply_graph_intent(&mut graph, intent)?;
+        match applied {
+            SemanticIntent::OpenVolume { stage_slug } => {
+                if let Some((stage, _)) = VolumeStage::WORKSPACE_SLUGS
+                    .iter()
+                    .find(|(_, slug)| *slug == stage_slug.as_str())
+                {
+                    self.current_stage = *stage;
+                    self.active_plane = stage.primary_plane();
+                }
+            }
+            SemanticIntent::Navigate { uri } => {
+                self.browser_url = uri;
+                self.current_stage = VolumeStage::Browser;
+            }
+            SemanticIntent::PreviewAsset { uri } => {
+                self.selected_library_uri = uri;
+                self.current_stage = VolumeStage::Library;
+            }
+            SemanticIntent::ComposeMessage { peer } => {
+                self.talk_input = format!("@{peer} ");
+                self.current_stage = VolumeStage::Talk;
+            }
+            SemanticIntent::InspectNode { semantic_id } => {
+                self.last_picked_semantic_id = Some(semantic_id);
+                self.dev_inspector_open = true;
+                self.inspect_continuity_open = true;
+                self.dev_inspector_tab = DevInspectorTab::NQuin48AndRefractStore;
+            }
+            SemanticIntent::AdoptTheme { cartridge_id } => {
+                self.adopt_theme(&cartridge_id)?;
+            }
+            SemanticIntent::PreviewTheme { cartridge_id } => {
+                if let Some(cartridge) = self.theme_registry.get(&cartridge_id) {
+                    self.theme_preset = css_class_for_theme(&cartridge.cartridge_id);
+                    self.theme_registry.active_id = cartridge_id;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    pub fn adopt_theme(&mut self, cartridge_id: &str) -> Result<(), String> {
+        self.theme_registry.activate(cartridge_id)?;
+        self.theme_preset = css_class_for_theme(cartridge_id);
+        if let Some(cartridge) = self.theme_registry.get(cartridge_id) {
+            self.custom_theme_vibe = cartridge.vibe_source.clone();
+        }
+        Ok(())
+    }
+}
+
+fn css_class_for_theme(id: &str) -> &'static str {
+    match id {
+        "theme-obsidian" => "theme-obsidian",
+        "theme-commons" => "theme-commons",
+        "theme-holoslate" => "theme-holoslate",
+        "theme-cyber-grid" => "theme-cyber-grid",
+        "theme-spatial-commons" => "theme-spatial-commons",
+        id if id.starts_with("custom-theme-") => "custom-theme",
+        _ => "theme-holosonic",
+    }
 }
 
 impl VolumeStage {
-    const WORKSPACE_SLUGS: [(Self, &'static str); 15] = [
+    pub const WORKSPACE_SLUGS: [(Self, &'static str); 15] = [
         (Self::None, "none"),
         (Self::Talk, "talk"),
         (Self::Mail, "mail"),

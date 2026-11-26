@@ -13,6 +13,7 @@ use std::{
 
 use aether::prelude::*;
 use aether_native::{
+    emf_hud_substrate::{EtalonEmfUiSubstrate, HudVertex},
     use_window, use_window_event,
     viewport::{
         EtalonFrameContext, EtalonSurfaceDelegate, EtalonSurfaceError, EtalonSurfaceWidget,
@@ -27,17 +28,24 @@ use blitz_traits::events::{BlitzWheelDelta, MouseEventButton, UiEvent};
 use kurbo::{Affine, BezPath, Circle, Line, Point, Rect, Stroke};
 use peniko::{Color, Fill};
 use webizen_ua_os::{
-    evaluate_hybrid_page_request, proxy_corners_for_specimen, resolve_holo_10d_specimen,
-    resolve_mode_for_uri, BrowserExecutionMode, HoloShaderVisualizationMode,
-    HybridWebCapabilityChannel, VerifiedHolo10dSpecimen, DEFAULT_HOLO_SPECIMENS,
-    HOLO_MAX_RAYMARCH_STEPS,
+    evaluate_hybrid_page_request, project_emf_ui_field, proxy_corners_for_specimen,
+    resolve_holo_10d_specimen, resolve_mode_for_uri, BrowserExecutionMode,
+    HoloShaderVisualizationMode, HybridWebCapabilityChannel, SemanticSceneGraph,
+    SpatialManifoldTopology, VerifiedHolo10dSpecimen, DEFAULT_HOLO_SPECIMENS, HOLO_MAX_RAYMARCH_STEPS,
 };
 
+use crate::components::spatial_stage_3d::pick_semantic_id as pick_graph_semantic_id;
 use crate::state::{session, ShellState, VolumeStage};
 
 const MAX_HARMONIC: u8 = 4;
 const MAX_STEPS: u32 = HOLO_MAX_RAYMARCH_STEPS;
 const UNIFORM_BYTES: u64 = 32;
+const HOLO_NODE_STRIDE: u64 = 96;
+const HOLO_NODE_COUNT: u64 = 64;
+const HOLO_NODE_BYTES: u64 = HOLO_NODE_STRIDE * HOLO_NODE_COUNT;
+const EMF_CELL_STRIDE: u64 = 64;
+const EMF_CELL_COUNT: u64 = 256;
+const EMF_FIELD_BYTES: u64 = EMF_CELL_STRIDE * EMF_CELL_COUNT;
 const CYAN: Color = Color::from_rgba8(47, 224, 200, 220);
 const VIOLET: Color = Color::from_rgba8(139, 124, 255, 160);
 const BACKGROUND: Color = Color::from_rgba8(13, 17, 30, 255);
@@ -92,6 +100,9 @@ struct HoloViewportControl {
     raymarch_steps: u32,
     submitted_extent: Option<(u32, u32)>,
     fallback_extent: Option<(u32, u32)>,
+    pick_graph: SemanticSceneGraph,
+    last_picked: Option<u64>,
+    widget_size: (f32, f32),
 }
 
 impl HoloViewportControl {
@@ -107,6 +118,9 @@ impl HoloViewportControl {
             raymarch_steps: 24,
             submitted_extent: None,
             fallback_extent: None,
+            pick_graph: SemanticSceneGraph::default(),
+            last_picked: None,
+            widget_size: (1.0, 1.0),
         }
     }
 
@@ -183,6 +197,10 @@ struct HoloGpu {
     pipeline: etalon::RenderPipeline,
     uniform: etalon::Buffer,
     bindings: etalon::BindGroup,
+    nodes: etalon::Buffer,
+    node_bindings: etalon::BindGroup,
+    emf: etalon::Buffer,
+    emf_bindings: etalon::BindGroup,
 }
 
 /// Etalon delegate for the bounded holographic phase-space projection preview.
@@ -262,6 +280,21 @@ fn uniform_data(
     bytes
 }
 
+fn projected_emf_field(view: &HoloViewportControl) -> webizen_ua_os::EmfUiField {
+    project_emf_ui_field(
+        &view.pick_graph,
+        SpatialManifoldTopology::OrbitalVolumetricAmphitheatre10d,
+    )
+}
+
+fn holo_node_bytes(view: &HoloViewportControl) -> Vec<u8> {
+    projected_emf_field(view).holo_node_bytes()
+}
+
+fn emf_field_bytes(view: &HoloViewportControl) -> Vec<u8> {
+    projected_emf_field(view).emf_cell_bytes()
+}
+
 fn etalon_scope_result(scope: etalon::ErrorScopeGuard) -> Result<(), EtalonSurfaceError> {
     let mut result = std::pin::pin!(scope.pop());
     match result
@@ -298,9 +331,35 @@ impl EtalonSurfaceDelegate for WebizenHolo10dSurfaceDelegate {
                 count: None,
             }],
         });
+        let node_layout = device.create_bind_group_layout(&etalon::BindGroupLayoutDescriptor {
+            label: Some("Webizen HOLO node storage"),
+            entries: &[etalon::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: etalon::ShaderStages::FRAGMENT,
+                ty: etalon::BindingType::Buffer {
+                    ty: etalon::BufferBindingType::Storage { read_only: true },
+                    has_dynamic_offset: false,
+                    min_binding_size: etalon::BufferSize::new(HOLO_NODE_BYTES),
+                },
+                count: None,
+            }],
+        });
+        let emf_layout = device.create_bind_group_layout(&etalon::BindGroupLayoutDescriptor {
+            label: Some("Webizen EMF field storage"),
+            entries: &[etalon::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: etalon::ShaderStages::FRAGMENT,
+                ty: etalon::BindingType::Buffer {
+                    ty: etalon::BufferBindingType::Storage { read_only: true },
+                    has_dynamic_offset: false,
+                    min_binding_size: etalon::BufferSize::new(EMF_FIELD_BYTES),
+                },
+                count: None,
+            }],
+        });
         let pipeline_layout = device.create_pipeline_layout(&etalon::PipelineLayoutDescriptor {
             label: Some("Webizen HOLO pipeline layout"),
-            bind_group_layouts: &[Some(&layout)],
+            bind_group_layouts: &[Some(&layout), Some(&node_layout), Some(&emf_layout)],
             ..Default::default()
         });
         let uniform = device.create_buffer(&etalon::BufferDescriptor {
@@ -309,12 +368,40 @@ impl EtalonSurfaceDelegate for WebizenHolo10dSurfaceDelegate {
             usage: etalon::BufferUsages::UNIFORM | etalon::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
+        let nodes = device.create_buffer(&etalon::BufferDescriptor {
+            label: Some("Webizen HOLO holographic nodes"),
+            size: HOLO_NODE_BYTES,
+            usage: etalon::BufferUsages::STORAGE | etalon::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let emf = device.create_buffer(&etalon::BufferDescriptor {
+            label: Some("Webizen EMF field cells"),
+            size: EMF_FIELD_BYTES,
+            usage: etalon::BufferUsages::STORAGE | etalon::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
         let bindings = device.create_bind_group(&etalon::BindGroupDescriptor {
             label: Some("Webizen HOLO uniform group"),
             layout: &layout,
             entries: &[etalon::BindGroupEntry {
                 binding: 0,
                 resource: uniform.as_entire_binding(),
+            }],
+        });
+        let node_bindings = device.create_bind_group(&etalon::BindGroupDescriptor {
+            label: Some("Webizen HOLO node group"),
+            layout: &node_layout,
+            entries: &[etalon::BindGroupEntry {
+                binding: 0,
+                resource: nodes.as_entire_binding(),
+            }],
+        });
+        let emf_bindings = device.create_bind_group(&etalon::BindGroupDescriptor {
+            label: Some("Webizen EMF field group"),
+            layout: &emf_layout,
+            entries: &[etalon::BindGroupEntry {
+                binding: 0,
+                resource: emf.as_entire_binding(),
             }],
         });
         let shader = device.create_shader_module(etalon::ShaderModuleDescriptor {
@@ -353,6 +440,10 @@ impl EtalonSurfaceDelegate for WebizenHolo10dSurfaceDelegate {
             pipeline,
             uniform,
             bindings,
+            nodes,
+            node_bindings,
+            emf,
+            emf_bindings,
         });
         self.window.request_redraw();
         Ok(())
@@ -374,6 +465,9 @@ impl EtalonSurfaceDelegate for WebizenHolo10dSurfaceDelegate {
             0,
             &uniform_data(&view, ctx.width, ctx.height, phase),
         );
+        ctx.queue.write_buffer(&gpu.nodes, 0, &holo_node_bytes(&view));
+        ctx.queue.write_buffer(&gpu.emf, 0, &emf_field_bytes(&view));
+        controls(&self.control).widget_size = (ctx.width as f32, ctx.height as f32);
         let mut encoder = ctx
             .device
             .create_command_encoder(&etalon::CommandEncoderDescriptor {
@@ -399,6 +493,8 @@ impl EtalonSurfaceDelegate for WebizenHolo10dSurfaceDelegate {
             });
             pass.set_pipeline(&gpu.pipeline);
             pass.set_bind_group(0, &gpu.bindings, &[]);
+            pass.set_bind_group(1, &gpu.node_bindings, &[]);
+            pass.set_bind_group(2, &gpu.emf_bindings, &[]);
             pass.draw(0..3, 0..1);
         }
         ctx.queue.submit([encoder.finish()]);
@@ -430,6 +526,7 @@ impl EtalonSurfaceDelegate for WebizenHolo10dSurfaceDelegate {
             None,
             &Rect::new(0.0, 0.0, width, height),
         );
+        paint_cpu_hud_fallback(&mut scene, width, height);
         let points = view.projection_bounds().map(|corner| {
             let [x, y] = view.project(corner);
             Point::new(
@@ -480,6 +577,16 @@ impl EtalonSurfaceDelegate for WebizenHolo10dSurfaceDelegate {
             UiEvent::PointerDown(pointer)
                 if pointer.is_primary && pointer.button == MouseEventButton::Main =>
             {
+                let (width, height) = view.widget_size;
+                if let Some(id) = pick_graph_semantic_id(
+                    &view.pick_graph,
+                    pointer.coords.client_x as f32,
+                    pointer.coords.client_y as f32,
+                    width,
+                    height,
+                ) {
+                    view.last_picked = Some(id);
+                }
                 self.dragging_from = Some((pointer.coords.client_x, pointer.coords.client_y));
                 false
             }
@@ -545,6 +652,49 @@ impl EtalonSurfaceDelegate for WebizenHolo10dSurfaceDelegate {
         let mut control = controls(&self.control);
         control.submitted_extent = None;
         control.fallback_extent = None;
+    }
+
+    fn pick_semantic_id(
+        &self,
+        local_x: f32,
+        local_y: f32,
+        width: f32,
+        height: f32,
+    ) -> Option<u64> {
+        let view = controls(&self.control);
+        pick_graph_semantic_id(&view.pick_graph, local_x, local_y, width, height)
+    }
+}
+
+fn paint_cpu_hud_fallback(scene: &mut Scene, width: f64, height: f64) {
+    let mut substrate = EtalonEmfUiSubstrate::new();
+    substrate.rebuild_workspace_chrome(width as f32, height as f32);
+    let mut verts = [HudVertex {
+        pos: [0.0; 2],
+        uv: [0.0; 2],
+        color: [0.0; 4],
+    }; 24];
+    let count = substrate.generate_hud_vertices(&mut verts);
+    for quad in verts[..count].chunks_exact(6) {
+        let color = quad[0].color;
+        let fill = Color::from_rgba8(
+            (color[0].clamp(0.0, 1.0) * 255.0) as u8,
+            (color[1].clamp(0.0, 1.0) * 255.0) as u8,
+            (color[2].clamp(0.0, 1.0) * 255.0) as u8,
+            (color[3].clamp(0.0, 1.0) * 255.0) as u8,
+        );
+        scene.fill(
+            Fill::NonZero,
+            Affine::IDENTITY,
+            fill,
+            None,
+            &Rect::new(
+                f64::from(quad[0].pos[0]),
+                f64::from(quad[0].pos[1]),
+                f64::from(quad[2].pos[0]),
+                f64::from(quad[2].pos[1]),
+            ),
+        );
     }
 }
 
@@ -647,6 +797,36 @@ struct Frame {
 }
 @group(0) @binding(0) var<uniform> frame: Frame;
 
+struct HolographicNodeGpu {
+    position_scale: vec4<f32>,
+    half_extents_primitive: vec4<f32>,
+    frequency_amplitude: vec4<f32>,
+    manifold_tensor: vec4<f32>,
+    connection_endpoint: vec4<f32>,
+    emissive_color: vec4<f32>,
+}
+@group(1) @binding(0) var<storage, read> nodes: array<HolographicNodeGpu>;
+
+struct EmfFieldCell {
+    amplitude: f32,
+    phase: f32,
+    frequency: f32,
+    scale: f32,
+    attention_depth: f32,
+    epistemic_weight: f32,
+    topological_spin: f32,
+    temporal_decay: f32,
+    entropy_bias: f32,
+    spatial_phase: f32,
+    recurrence_frequency: f32,
+    density_threshold: f32,
+    manifold_curvature: f32,
+    stokes_q: f32,
+    stokes_u: f32,
+    stokes_v: f32,
+}
+@group(2) @binding(0) var<storage, read> emf: array<EmfFieldCell>;
+
 const corners = array<vec3<f32>, 8>(
     vec3(-1.0,-1.0,-1.0), vec3(1.0,-1.0,-1.0), vec3(1.0,1.0,-1.0), vec3(-1.0,1.0,-1.0),
     vec3(-1.0,-1.0,1.0), vec3(1.0,-1.0,1.0), vec3(1.0,1.0,1.0), vec3(-1.0,1.0,1.0)
@@ -711,6 +891,14 @@ fn holo_scene_sdf(p: vec3<f32>, half_extent: vec3<f32>, harmonic: u32, mode: u32
     let ring_p = vec3(q.x, q.y * cos(0.45) - q.z * sin(0.45), q.y * sin(0.45) + q.z * cos(0.45));
     let torus = torus_sdf(ring_p, vec2(0.58, 0.075));
     var d = smin_cubic(core, smin_cubic(sat_a, sat_b, 0.24), 0.28);
+    let n_count = min(arrayLength(&nodes), 4u);
+    for (var ni: u32 = 1u; ni < n_count; ni += 1u) {
+        let gnode = nodes[ni];
+        let gpos = gnode.position_scale.xyz * 0.45;
+        let grad = clamp(gnode.position_scale.w * 0.18, 0.10, 0.22);
+        let gd = length(q - gpos) - grad;
+        d = smin_cubic(d, gd, 0.18);
+    }
     if mode != 2u {
         d = smin_cubic(d, torus, 0.16);
     }
@@ -839,6 +1027,20 @@ fn mobius(z: vec2<f32>, a: f32) -> vec2<f32> {
     }
     rgb = mix(rgb, ring_color, 0.70 * rings);
     rgb = mix(rgb, vec3(0.18, 0.88, 0.78), 0.86 * wire);
+    if arrayLength(&nodes) > 0u {
+        rgb = mix(rgb, nodes[0].emissive_color.xyz, 0.08);
+    }
+    let emf_len = arrayLength(&emf);
+    if emf_len > 0u {
+        let norm_uv = clamp(pixel.xy / max(size, vec2(1.0)), vec2(0.0), vec2(0.999));
+        let gx = min(u32(norm_uv.x * 16.0), 15u);
+        let gy = min(u32(norm_uv.y * 16.0), 15u);
+        let cell_idx = min(gy * 16u + gx, emf_len - 1u);
+        let cell = emf[cell_idx];
+        let pol = length(vec3(cell.stokes_q, cell.stokes_u, cell.stokes_v));
+        let wave = vec3(cell.amplitude, cell.attention_depth, cell.epistemic_weight);
+        rgb = mix(rgb, wave, 0.05 + 0.04 * pol + 0.03 * abs(cell.manifold_curvature));
+    }
     return vec4(rgb, 1.0);
 }
 "#;
@@ -997,6 +1199,27 @@ fn AllowedHolo10dViewport(
         }
         mounted.as_ref().cloned()
     };
+    if let Some(entry) = entry.as_ref() {
+        let graph = state.read().project_semantic_scene_graph();
+        let picked = {
+            let mut control = controls(&entry.control);
+            control.pick_graph = graph;
+            control.last_picked.take()
+        };
+        if let Some(id) = picked {
+            let mut shell = state.write();
+            shell.last_picked_semantic_id = Some(id);
+            if let Some(node) = shell
+                .project_semantic_scene_graph()
+                .nodes
+                .iter()
+                .find(|node| node.semantic_id == id)
+            {
+                let intent = node.primary_intent.clone();
+                let _ = shell.apply_semantic_intent(&intent);
+            }
+        }
+    }
 
     use_window_event({
         let cache = Rc::clone(&cache);
@@ -1450,13 +1673,17 @@ fn WorkerSupervisorPanel(
     };
     rsx! {
         section {
-            class: "id-list",
-            h4 { "Ring C Worker & RouteStamp Supervisor" }
-            dl {
-                class: "kv",
-                dt { "Worker binary" }
-                dd { class: "path", "{slot}" }
-                dt { "Worker state" }
+            class: "browser-viewport-launcher",
+            h4 { "Web Engine worker (`chora-worker`) is not running — click to probe or launch" }
+            p { class: "muted", "{worker_state}" }
+            details {
+                class: "tech-details-drawer",
+                summary { "Engine details" }
+                dl {
+                    class: "kv",
+                    dt { "Worker binary" }
+                    dd { class: "path", "{slot}" }
+                    dt { "Worker state" }
                 dd { "{worker_state}" }
                 if snapshot.view_id != 0 && inactive_reason.is_empty() {
                     dt { "Session tag · view · accepted frame sequence" }
@@ -1501,6 +1728,7 @@ fn WorkerSupervisorPanel(
                 },
                 Some(Err(error)) => rsx! { p { role: "status", "qualia.graph.snapshot · {error:?}" } },
                 None => rsx! {},
+            }
             }
         }
     }

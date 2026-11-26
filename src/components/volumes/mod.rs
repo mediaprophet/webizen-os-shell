@@ -11,5 +11,6 @@ pub(crate) mod poet_synth;
 pub(crate) mod projects;
 pub(crate) mod sanctuary;
 pub(crate) mod settings;
+pub(crate) mod theme_studio;
 pub(crate) mod wallet;
 pub(crate) mod wellfair;

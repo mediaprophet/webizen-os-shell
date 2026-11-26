@@ -1,10 +1,13 @@
+// Copyright (c) 2026 Timothy Charles Holborn.
+// SPDX-License-Identifier: CC-BY-NC-ND-4.0
+
 mod qualia_admission;
 
 use self::qualia_admission::QualiaAdmissionPanel;
 use crate::components::auxiliary_windows::{
     apply_shell_command, jump_to_stage, AuxShellCommand, AuxWindowBridge, CareResponseAuthority,
 };
-use crate::components::{HaloBar, OrbitWheel, StageHost};
+use crate::components::{toggle_dev_inspector, DevInspectorDrawer, HaloBar, OrbitWheel, StageHost};
 use crate::state::{refresh_refract_host_records, session, ShellState, WebizenRefractModel};
 use aether::{
     aether_core::{provide_context, try_consume_context},
@@ -12,7 +15,7 @@ use aether::{
 };
 use aether_native::winit::{
     event::{ElementState, WindowEvent},
-    keyboard::{Key, ModifiersState},
+    keyboard::{Key, ModifiersState, NamedKey},
 };
 use aether_native::{AetherNativeWindowRenderer, RendererFallbackPolicy};
 use aether_qualia_host::{prelude::QualiaHostContext, NativeAuthoringBridge};
@@ -195,8 +198,19 @@ fn arm_omni_shortcut(mut state: Signal<ShellState>) {
             if event.state == ElementState::Pressed && !event.repeat =>
         {
             let held = modifiers.get();
-            if held.control_key() && !held.alt_key() {
-                match &event.logical_key {
+            match &event.logical_key {
+                Key::Named(NamedKey::F12) => {
+                    toggle_dev_inspector(&mut state.write());
+                }
+                Key::Character(key)
+                    if held.control_key()
+                        && held.shift_key()
+                        && !held.alt_key()
+                        && key.eq_ignore_ascii_case("i") =>
+                {
+                    toggle_dev_inspector(&mut state.write());
+                }
+                _ if held.control_key() && !held.alt_key() => match &event.logical_key {
                     Key::Character(key) if key.eq_ignore_ascii_case("k") => {
                         if !state.peek().launcher_open {
                             state.write().launcher_open = true;
@@ -214,7 +228,8 @@ fn arm_omni_shortcut(mut state: Signal<ShellState>) {
                         state.write().ui_scale_percent = 115;
                     }
                     _ => {}
-                }
+                },
+                _ => {}
             }
         }
         _ => {}
@@ -479,13 +494,9 @@ pub fn App() -> Element {
     let ui_scale_percent = s.ui_scale_percent.clamp(85, 175);
     let _ = aether_native::set_document_zoom(f32::from(ui_scale_percent) / 100.0);
     let status = if s.current_stage == crate::state::VolumeStage::None {
-        format!("{} · {} · 42 MiB Sentinel", s.sku_label, s.gpu_label)
+        format!("{} · Home", s.sku_label)
     } else {
-        format!(
-            "Volume · {} ({})",
-            s.current_stage.title(),
-            s.current_stage.primary_plane().code()
-        )
+        format!("{}", s.current_stage.title())
     };
     let active = s.current_stage.title();
     let launcher_open = s.launcher_open;
@@ -517,10 +528,12 @@ pub fn App() -> Element {
                 StageHost { state }
             }
 
+            DevInspectorDrawer { state }
+
             footer {
                 class: "footer",
                 role: "contentinfo",
-                span { "handle ≠ human · agent = tool · VC = origin/integrity" }
+                span { "People stay people · tools stay tools" }
                 span { class: "grow" }
                 span { id: "shell-status", "{status}" }
                 button {

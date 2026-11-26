@@ -33,10 +33,10 @@ pub fn LibraryVolume(mut state: Signal<ShellState>) -> Element {
         .or_else(|| matched.first().cloned());
     let portability_entry = selected_entry.clone();
 
-    let store_path = s.semantic_fs.store_path.display().to_string();
+    let _store_path = s.semantic_fs.store_path.display().to_string();
     let total_entries = s.semantic_fs.entries.len();
     let match_count = tallies.matching_entries;
-    let total_quins = tallies.total_quins;
+    let _total_quins = tallies.total_quins;
     let text_query = filter.text_query.clone();
     let active_sec = filter.section.clone();
     let active_entity = filter.entity_depicts.clone().unwrap_or_default();
@@ -211,14 +211,12 @@ pub fn LibraryVolume(mut state: Signal<ShellState>) -> Element {
                 class: "settings-content",
                 header {
                     class: "settings-head",
-                    h3 { "Library · Semantic File-System, Opt-In Poet ToolChest & Ontological Discovery" }
-                    p {
-                        "Resources are bound as a 48-byte NQuin48 edge-graph in the 60-bit FNV-1a identity space — never a hierarchical folder tree. Elect which specialized Semantic Toolboxes (10D AREF/IOVR & L0-L6 Strata, Holosonic .qac & Bioacoustics, Temporal Timeline & GeoSPARQL, Biomedical DICOM Atlas, CML Deontic & QECP, Permissive Commons Lifecycle) are active in your workspace."
-                    }
+                    h3 { "Library" }
+                    p { "Browse files, pages, and 3D models. Click a card to preview it." }
                 }
                 p {
                     class: "muted",
-                    "Showing {match_count} of {total_entries} semantic containers · {total_quins} parity-verified 48-byte NQuin48 edges active · {enabled_toolboxes.len()}/6 Toolboxes enabled · Store: {store_path}"
+                    "Showing {match_count} of {total_entries} items"
                 }
 
                 Holo10dViewport {

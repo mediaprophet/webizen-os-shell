@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Timothy Charles Holborn.
+// SPDX-License-Identifier: CC-BY-NC-ND-4.0
+
 #![cfg_attr(not(test), windows_subsystem = "windows")]
 
 mod app;
@@ -147,8 +150,12 @@ fn main() {
             }
         } else if first == "uat" {
             std::env::set_var("WEBIZEN_UAT_AUTO", "1");
-            if let Some(stage_filter) = args.get(1) {
-                std::env::set_var("WEBIZEN_UAT_STAGE", stage_filter);
+            for arg in args.iter().skip(1) {
+                if arg == "--all-themes" {
+                    std::env::set_var("WEBIZEN_UAT_ALL_THEMES", "1");
+                } else if !arg.starts_with('-') {
+                    std::env::set_var("WEBIZEN_UAT_STAGE", arg);
+                }
             }
         }
     }

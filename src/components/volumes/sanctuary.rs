@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Timothy Charles Holborn.
 // SPDX-License-Identifier: CC-BY-NC-ND-4.0
 
+use super::theme_studio::EnvironmentQuestionnairePanel;
 use crate::state::{session, ShellState};
 use aether::prelude::*;
 use webizen_ua_os::{
@@ -67,8 +68,10 @@ pub fn SanctuaryVolume(mut state: Signal<ShellState>) -> Element {
             class: "settings-volume",
             header {
                 class: "settings-head",
-                h3 { "Keep · Sanctuary & 7-Screen New-User Onboarding Wizard" }
+                h3 { "Keep" }
+                p { "Private files, unlock status, and a guided recovery wizard. Looks and access comfort live here too." }
             }
+            EnvironmentQuestionnairePanel { state }
 
             section {
                 class: "id-list",

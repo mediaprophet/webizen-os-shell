@@ -783,6 +783,31 @@ pub fn produce_hypermedia_vibe(
     }
 }
 
+/// Package a custom VibeScript theme cartridge into a Permissive Commons `.hmc` bundle.
+pub fn export_theme_cartridge_hmc(
+    host: &LoopbackHost,
+    cartridge: &crate::theme_cartridge::ThemeCartridgeManifest,
+) -> HypermediaProduceReceipt {
+    if let Err(detail) = crate::llm_theme_codesigner::verify_designed_theme(cartridge) {
+        return HypermediaProduceReceipt {
+            ok: false,
+            mode: "Permissive Commons theme cartridge".into(),
+            output_summary: detail,
+            output_dir: host.storage.join("production").join(&cartridge.cartridge_id),
+        };
+    }
+    let script = format!(
+        "{}\n// Permissive Commons theme cartridge {}\n",
+        cartridge.vibe_source.trim(),
+        cartridge.cartridge_id
+    );
+    let mut receipt = produce_hypermedia_vibe(host, &script, &cartridge.cartridge_id);
+    if receipt.ok {
+        receipt.mode = "Permissive Commons theme cartridge (.hmc)".into();
+    }
+    receipt
+}
+
 fn locate_synth_cli_binary(host: &LoopbackHost) -> Option<PathBuf> {
     let exe_name = if cfg!(windows) { "synth.exe" } else { "synth" };
     let beside = host.install_root.join(exe_name);

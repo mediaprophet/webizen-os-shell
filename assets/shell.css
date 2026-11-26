@@ -1,6 +1,12 @@
 /* ============================================================================
- * Webizen OS-Shell — High-Clarity Spatial Native Desktop Sheet
- * Tuned specifically for Aether Native / Blitz + Taffy + Parley + Etalon GPU
+ * Webizen OS-Shell — CPU / AccessKit / IME fallback sheet
+ *
+ * Primary look lives on the Etalon GPU: Q42EMF64 (EmfFieldCell), 10D HOLO
+ * (HolographicNodeGpu), and the zero-heap UiLayoutTree / HudVertex substrate.
+ * This CSS is the Parley text-shaping, IME input, AccessKit tree, and
+ * RendererFallbackPolicy::CpuOnFailure software layer. Keep it layout,
+ * contrast, and focus. Decorative 3D optics stay off this sheet.
+ * Copyright (c) 2026 Timothy Charles Holborn — CC BY-NC-ND 4.0
  * ============================================================================ */
 
 :root {
@@ -107,7 +113,7 @@ main#main {
   transform: none !important;
 }
 
-/* Subtle background atmosphere */
+/* Fallback backdrop. Wavefield atmosphere is GPU EMF, not CSS. */
 .field {
   position: fixed;
   top: 0;
@@ -116,7 +122,7 @@ main#main {
   bottom: 0;
   z-index: 0;
   pointer-events: none;
-  background: linear-gradient(160deg, #060b13 0%, #0a1422 50%, #07111a 100%);
+  background: var(--void);
 }
 
 /* Primary 2-column + footer shell layout */
@@ -951,6 +957,7 @@ button:disabled {
 
 input[type="text"],
 input[type="search"],
+/* IME composition, Parley text shaping, and AccessKit focus rings (CPU fallback). */
 input[type="url"],
 input[type="number"],
 input:not([type]),
@@ -1128,7 +1135,6 @@ summary {
   border: 1px solid var(--line-strong);
   border-radius: 14px;
   overflow-y: auto;
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.85);
   padding-bottom: 0.65rem;
 }
 
@@ -1336,7 +1342,6 @@ summary {
   border-radius: 11px;
   background: var(--surface-1);
   color: var(--ink);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.75);
 }
 
 .os-control-center-drawer {
@@ -1424,4 +1429,195 @@ summary {
   display: block;
   width: min(19rem, 100%);
   margin-top: 0.2rem;
+}
+
+/* Product-first workspaces, inspector, and original spatial looks */
+
+.theme-holoslate {
+  --void: #081018;
+  --surface-0: #101820;
+  --surface-1: #182430;
+  --ink: #e8f4ff;
+  --teal: #7ad7ff;
+  --glass: rgba(22, 40, 56, 0.55);
+}
+
+.theme-cyber-grid {
+  --void: #04080c;
+  --surface-0: #071018;
+  --surface-1: #0c1c28;
+  --ink: #d7fff4;
+  --teal: #39ffce;
+  --cyan: #3cf0ff;
+  --line: rgba(57, 255, 206, 0.35);
+}
+
+.theme-spatial-commons {
+  --void: #07060f;
+  --surface-0: #100e1c;
+  --surface-1: #1a1730;
+  --ink: #f4f0ff;
+  --violet: #b8a6ff;
+  --teal: #9ad7ff;
+}
+
+.custom-theme {
+  --void: #0a1016;
+  --ink: #eef4fa;
+}
+
+.dev-inspector-drawer {
+  position: absolute;
+  z-index: 20;
+  right: 0.75rem;
+  bottom: 2.6rem;
+  width: min(36rem, calc(100% - 1.5rem));
+  max-height: 62vh;
+  overflow: auto;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  background: var(--panel-glass);
+}
+
+.dev-inspector-head,
+.dev-inspector-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+  margin-bottom: 0.55rem;
+}
+
+.browser-workspace,
+.comms-workspace,
+.library-workspace {
+  display: flex;
+  flex-direction: column;
+  min-height: 85%;
+  height: 100%;
+}
+
+.browser-toolbar,
+.browser-address {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.browser-address {
+  flex: 1 1 16rem;
+}
+
+.browser-viewport {
+  flex: 1 1 auto;
+  min-height: 22rem;
+  height: 85%;
+}
+
+.browser-mode-switch {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.tech-details-drawer {
+  margin-top: 0.7rem;
+}
+
+.comms-workspace {
+  display: grid;
+  grid-template-columns: minmax(11rem, 28%) minmax(0, 1fr);
+  min-height: 85%;
+  gap: 0.75rem;
+}
+
+.comms-pane-list,
+.comms-pane-thread {
+  min-height: 18rem;
+  padding: 0.7rem;
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  background: var(--surface-1);
+}
+
+.comms-messages {
+  min-height: 12rem;
+  max-height: 55vh;
+  overflow-y: auto;
+}
+
+.comms-compose {
+  margin-top: 0.6rem;
+}
+
+/* Spatial stages: layout only. Optics, kinetics, and acoustics are GPU EMF/HOLO. */
+.spatial-stage {
+  position: relative;
+  min-height: 85%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.holoslate-track,
+.spatial-commons-ring,
+.cyber-grid-city {
+  position: relative;
+  min-height: 24rem;
+  height: 80%;
+}
+
+.holoslate-panel,
+.cyber-tower,
+.diegetic-console {
+  min-height: 4rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--panel-border);
+  color: var(--ink);
+  background: var(--surface-1);
+}
+
+.cyber-tower-shaft {
+  display: block;
+  height: 70%;
+}
+
+.stage-toast {
+  margin: 0.35rem 0.85rem;
+}
+
+.poet-editor-canvas {
+  min-height: 14rem;
+  width: 100%;
+}
+
+.project-milestones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  list-style: none;
+  padding: 0;
+}
+
+.project-milestones li {
+  padding: 0.35rem 0.6rem;
+  border: 1px solid var(--panel-border);
+  border-radius: 999px;
+}
+
+.project-milestones li.live {
+  border-color: var(--teal);
+  color: var(--teal);
+}
+
+.theme-card.active {
+  outline: 1px solid var(--teal);
+}
+
+.browser-viewport-launcher {
+  min-height: 16rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 1.2rem;
 }

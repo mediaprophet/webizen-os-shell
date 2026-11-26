@@ -1,5 +1,10 @@
+// Copyright (c) 2026 Timothy Charles Holborn.
+// SPDX-License-Identifier: CC-BY-NC-ND-4.0
+
 use super::auxiliary_windows::AuxWindowBridge;
+use super::dev_inspector::{toggle_dev_inspector, volume_plane_sentence};
 use super::holo_glyph::{eval_vibe_icon_omega, HoloGlyphIcon, HoloGlyphKind};
+use super::themes::{CyberGridStage, HoloslateArcStage, SpatialCommonsStage};
 use super::volumes::{
     admin::AdminVolume,
     browser::BrowserVolume,
@@ -22,32 +27,27 @@ pub fn StageHost(mut state: Signal<ShellState>) -> Element {
     let s = state.read();
     let current = s.current_stage;
     let active_plane = s.active_plane;
-    let gpu = s.gpu_label.clone();
-    let parity_ok = s.nquin_parity_verified;
-    let providers = s.native_vibe_providers;
     let empty = current == VolumeStage::None;
     let current_title = current.title();
-    let current_plane_code = current.primary_plane().code();
+    let current_plane_title = current.primary_plane().title();
     let orb_open = s.orb_open;
-    let inspect_open = s.inspect_continuity_open;
     let orb_toast = s.orb_toast.clone();
+    let theme = s.theme_preset;
     let chrome_mode = s.stage_chrome_mode;
     let control_center_open = s.control_center_drawer_open;
     let ui_scale_percent = s.ui_scale_percent;
     let high_contrast = s.theme_preset == "theme-obsidian";
     let animating_icons = s.animate_icons && !s.reduced_motion;
-    let renderer = s.renderer_health.clone();
-    let (width, height) = renderer.viewport_dimensions;
     drop(s);
 
-    let parity_str = if parity_ok { "VERIFIED" } else { "PLANNED" };
     let stage_class = match chrome_mode {
         StageChromeMode::DefaultDepth => "stage",
         StageChromeMode::FullStage => "stage full",
         StageChromeMode::FloatLayer => "stage float-mode",
     };
     let plane_title = active_plane.title();
-    let plane_rule = active_plane.anti_collapse_rule();
+    let plane_friendly_summary = volume_plane_sentence(current);
+    let inspector_open = state.read().dev_inspector_open;
 
     rsx! {
         div {
@@ -56,10 +56,10 @@ pub fn StageHost(mut state: Signal<ShellState>) -> Element {
             // Top Continuity Ribbon (who · claim · handle · tool)
             nav {
                 class: "ribbon-bar",
-                aria_label: "Continuity planes",
+                aria_label: "Who you are working as",
                 div {
                     class: "ribbon-pills",
-                    span { class: "ribbon-tag", "Continuity" }
+                    span { class: "ribbon-tag", "Working as" }
                     for plane in IdentifierFabricPlane::ALL {
                         {
                             let is_active = active_plane == plane;
@@ -75,7 +75,7 @@ pub fn StageHost(mut state: Signal<ShellState>) -> Element {
                                     onclick: move |_| {
                                         state.write().active_plane = plane;
                                     },
-                                    "{short} · {code}"
+                                    "{short}"
                                 }
                             }
                         }
@@ -84,12 +84,22 @@ pub fn StageHost(mut state: Signal<ShellState>) -> Element {
                 div {
                     class: "ribbon-note",
                     strong { "{plane_title}: " }
-                    span { "{plane_rule}" }
+                    span { "{plane_friendly_summary}" }
                 }
                 div {
                     class: "a11y-quick-bar",
                     role: "group",
                     aria_label: "Quick accessibility and text scaling controls",
+                    button {
+                        r#type: "button",
+                        class: if inspector_open { "ribbon-btn active" } else { "ribbon-btn" },
+                        title: "Toggle Developer & Continuity Inspector (F12)",
+                        aria_label: "Toggle Developer and Continuity Inspector",
+                        onclick: move |_| {
+                            toggle_dev_inspector(&mut state.write());
+                        },
+                        if inspector_open { "Inspect: On" } else { "Inspect (F12)" }
+                    }
                     button {
                         r#type: "button",
                         class: "ribbon-btn",
@@ -202,7 +212,7 @@ pub fn StageHost(mut state: Signal<ShellState>) -> Element {
                             "◉"
                         }
                         div { class: "vtitle", "{current_title}" }
-                        span { class: "pill plane", "{current_plane_code}" }
+                        span { class: "pill plane", "{current_plane_title}" }
                         span { class: "pill live", "Live" }
                         button {
                             r#type: "button",
@@ -236,50 +246,26 @@ pub fn StageHost(mut state: Signal<ShellState>) -> Element {
                             CommandOrbBar { state }
                         }
                     }
-                    if inspect_open {
-                        ContinuityInspectorBanner { current, state }
-                    }
                 }
                 div {
                     class: "stage-body",
                     if empty {
-                        EmptyManifold { state, gpu: gpu.clone() }
+                        match theme {
+                            "theme-holoslate" => rsx! { HoloslateArcStage { state } },
+                            "theme-cyber-grid" => rsx! { CyberGridStage { state } },
+                            "theme-spatial-commons" => rsx! { SpatialCommonsStage { state } },
+                            _ => rsx! { EmptyManifold { state } },
+                        }
                     } else {
                         VolumeBody { current, state }
                     }
                 }
             }
-            section {
-                id: "gpu",
-                role: "region",
-                aria_label: "GPU and renderer health",
-                div {
-                    class: "gpu-inline-summary",
-                    strong { "GPU Stage: " }
-                    span { class: "pill plane", "NATIVE_DESKTOP" }
-                    span {
-                        " {gpu} · {renderer.backend_label} · NQuin48: {parity_str} · {providers} Vibe providers · {width}×{height} px"
-                    }
-                    if !orb_toast.is_empty() {
-                        span { class: "pill plane", "{orb_toast}" }
-                    }
-                }
-                details {
-                    class: "gpu-details-pop",
-                    summary { "Renderer Details" }
-                    dl {
-                        class: "renderer-health",
-                        dt { "Backend" }
-                        dd { "{renderer.backend_label}" }
-                        dt { "Fallback policy" }
-                        dd { "{renderer.fallback_policy_label}" }
-                        dt { "Fallback engaged" }
-                        dd { if renderer.fallback_engaged { "Yes" } else { "No" } }
-                        dt { "HOLO surface" }
-                        dd { "{renderer.active_holo_surface_status}" }
-                        dt { "Viewport" }
-                        dd { "{width} × {height} px" }
-                    }
+            if !orb_toast.is_empty() {
+                p {
+                    class: "muted stage-toast",
+                    role: "status",
+                    "{orb_toast}"
                 }
             }
             if control_center_open {
@@ -490,12 +476,8 @@ fn CommandOrbBar(mut state: Signal<ShellState>) -> Element {
                 button {
                     r#type: "button",
                     class: "orb-sector-btn",
-                    onclick: move |_| {
-                        let mut s = state.write();
-                        s.inspect_continuity_open = !s.inspect_continuity_open;
-                        s.orb_toast = "Orb Sector 7 · Toggled Four-Plane Continuity Inspector".into();
-                    },
-                    "7. 🔍 Inspect"
+                    onclick: move |_| toggle_dev_inspector(&mut state.write()),
+                    "7. Inspect"
                 }
                 button {
                     r#type: "button",
@@ -546,143 +528,118 @@ fn CommandOrbBar(mut state: Signal<ShellState>) -> Element {
 }
 
 #[component]
-fn ContinuityInspectorBanner(current: VolumeStage, mut state: Signal<ShellState>) -> Element {
-    let plane = current.primary_plane();
-    let plane_title = plane.title();
-    let plane_rule = plane.anti_collapse_rule();
-    let blurb = current.blurb();
-    let fabric = state.read().fabric_did.clone();
-    rsx! {
-        div {
-            class: "inspect-banner",
-            div {
-                strong { "Continuity Inspector · Primary Plane: {plane_title} " }
-                span { "— {blurb} · {plane_rule} · Local QRC Node: {fabric}" }
-            }
-            button {
-                r#type: "button",
-                class: "btn-win",
-                onclick: move |_| state.write().inspect_continuity_open = false,
-                "Hide Inspector"
-            }
-        }
-    }
-}
-
-#[component]
-fn EmptyManifold(mut state: Signal<ShellState>, gpu: String) -> Element {
+fn EmptyManifold(mut state: Signal<ShellState>) -> Element {
     let qap_count = state.read().installed_qaps.len();
     let llm_count = state.read().llm_models.len();
-    let summary_right =
-        format!("{qap_count} Qaps seeded · {llm_count} local AI models · 150 Synth morphisms");
+    let summary_right = format!("{qap_count} apps ready · {llm_count} local models");
     rsx! {
         div {
             class: "stage-empty",
             id: "stage-empty",
             div {
                 class: "manifold",
-                aria_label: "Working volumes",
+                aria_label: "Apps",
                 div {
                     class: "gpu-banner",
                     div {
-                        strong { "Etalon Native GPU Stage · {gpu}" }
-                        span { " — Spatial depth manifold (Not OSX / Windows / Linux chrome). Humans-first halo. Poet 8-Sector Command Orb." }
+                        strong { "Choose an app" }
+                        span { " — Talk, Mail, Browser, Library, and the rest of your workspace." }
                     }
                     span { class: "pill live", "{summary_right}" }
                 }
                 ManifoldCard {
                     name: "Talk",
-                    plane: "claim · relation",
-                    heading: "A person, waiting for a person",
-                    body: "Human <-> human over QDNF. Chatbot sits on the Tool plane — never impersonates a peer.",
+                    plane: "people",
+                    heading: "Messages with people you know",
+                    body: "A conversation list on the left and the thread on the right. Helper tools stay clearly marked as tools.",
                     stage: VolumeStage::Talk,
                     state,
                 }
                 ManifoldCard {
                     name: "Mail",
-                    plane: "handle · claim",
-                    heading: "Relationship-scoped inbox",
-                    body: "Directional pairwise locators (A->B != B->A). Domain death never erases the person.",
+                    plane: "letters",
+                    heading: "Inbox for letters and notes",
+                    body: "Read a thread, write a reply, and keep each relationship in its own mailbox.",
                     stage: VolumeStage::Mail,
                     state,
                 }
                 ManifoldCard {
                     name: "Directory",
-                    plane: "who (NaturalAgent)",
-                    heading: "People & Living Beings first",
-                    body: "Framed as living-SHACL (disjoint from owl:Thing). Pairwise introductions and social book.",
+                    plane: "people",
+                    heading: "People and introductions",
+                    body: "Your social book of people and co-ops. Organisations and tools live in their own lists.",
                     stage: VolumeStage::Directory,
                     state,
                 }
                 ManifoldCard {
                     name: "Browser",
-                    plane: "handle · claim",
-                    heading: "Dual-Web Reach (Chora + WWW Engine)",
-                    body: "Ring B qualia://chora/universe 10D canvas + Ring C webizen-WWW-engine (MPL-2.0 sibling worker).",
+                    plane: "pages",
+                    heading: "Web and spatial pages",
+                    body: "A real address bar over a full-window page. Open ordinary websites or spatial scenes.",
                     stage: VolumeStage::Browser,
                     state,
                 }
                 ManifoldCard {
-                    name: "Poet & Synth Workbench",
-                    plane: "tool · claim",
-                    heading: "Unified VibeScript + 150 Hypermedia Morphisms",
-                    body: "Live VibeScript 0.1/0.2 cells, NLP Gazetteer NQuin48 sealer, and .10d v2 HOLO / .hmc production.",
+                    name: "Poet Studio",
+                    plane: "studio",
+                    heading: "Write, draw, and make 3D work",
+                    body: "A document editor, formula cells, and a 3D canvas in one studio.",
                     stage: VolumeStage::Poet,
                     state,
                 }
                 ManifoldCard {
                     name: "WellFair & Anatomy",
-                    plane: "who · claim · tool",
-                    heading: "Fiduciary Health, 3D Anatomy & Guardianship",
-                    body: "48B NQuin epistemic envelopes, maternal-fetal dyad, UN CRC/CRPD guardianship, and 6 Vectors.",
+                    plane: "care",
+                    heading: "Health journal and anatomy atlas",
+                    body: "A 3D atlas, personal notes, and care-circle check-ins for the people you look after.",
                     stage: VolumeStage::Wellfair,
                     state,
                 }
                 ManifoldCard {
-                    name: "Wallet & Commons",
-                    plane: "tool · claim",
-                    heading: "Lightning · Nym · eCash (XEC) · Tokens",
-                    body: "Human-owned keys in KeyVault. Two-Loop Permissive Commons & 9-Stage Contribution. No ETH.",
+                    name: "Wallet",
+                    plane: "money",
+                    heading: "Balances, send, and receive",
+                    body: "Lightning, mixnet, and eCash cards with a simple send form. You sign; tools only propose.",
                     stage: VolumeStage::Wallet,
                     state,
                 }
                 ManifoldCard {
-                    name: "Keep · Sanctuary Vault",
-                    plane: "tool",
-                    heading: "Anti-Coercion 4-Layer VaultContainerV2",
-                    body: "Argon2id + AES-256-GCM Real/Decoy lanes, Audit DAG, Anvil NP64 gate, Dead-Man & Incapacity switches.",
+                    name: "Keep",
+                    plane: "private",
+                    heading: "Private files and recovery",
+                    body: "Unlock status, protected files, and a guided family recovery wizard.",
                     stage: VolumeStage::Keep,
                     state,
                 }
                 ManifoldCard {
-                    name: "Instruments & Logics",
-                    plane: "tool · claim",
-                    heading: "6 Core Semantic Instruments & 40+ Formal Logics",
-                    body: "Collectable HMC logic packages (SI-01..12), 6 SHACL opcode bridges, and local .p64/.gguf AI models.",
+                    name: "Instruments",
+                    plane: "tools",
+                    heading: "Local models and helpers",
+                    body: "Choose a local model, try it, and keep helper tools separate from people.",
                     stage: VolumeStage::Instruments,
                     state,
                 }
                 ManifoldCard {
-                    name: "Library & QECP",
-                    plane: "claim · tool",
-                    heading: "Hypermedia (.q42 / .10d / .hmc) & QECP PDFs",
-                    body: "Faceted SPARQL-Star & GeoSPARQL keep with C2PA JUMBF embedded verifiable credential extraction.",
+                    name: "Library",
+                    plane: "files",
+                    heading: "Books, files, and 3D models",
+                    body: "A card grid with a preview pane for documents, media, and spatial models.",
                     stage: VolumeStage::Library,
                     state,
                 }
                 ManifoldCard {
-                    name: "Projects · Work-Graph",
-                    plane: "claim · relation",
-                    heading: "Cooperative Projects & 9-Stage Lifecycle",
-                    body: "Steward/Contributor/Observer roles, add-wins effort/capital merge, and licence-transition readiness.",
+                    name: "Projects",
+                    plane: "work",
+                    heading: "Shared work and milestones",
+                    body: "See the current stage of a project, log effort, and keep roles clear.",
                     stage: VolumeStage::Projects,
                     state,
                 }
                 ManifoldCard {
-                    name: "Settings (10 Sections)",
-                    plane: "tool",
-                    heading: "Environment Setup & Four-Plane Identifier Fabric",
-                    body: "Setup health, Data strata, AI instruments, QDNF/Solid, Sanctuary, Appearance, Fleet, and Dual-SKU.",
+                    name: "Settings",
+                    plane: "setup",
+                    heading: "Looks, access, and this device",
+                    body: "Text size, colour, motion, and the questionnaire that suggests a look that fits you.",
                     stage: VolumeStage::Settings,
                     state,
                 }

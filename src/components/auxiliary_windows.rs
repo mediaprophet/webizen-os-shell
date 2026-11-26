@@ -484,8 +484,7 @@ pub(crate) fn apply_shell_command(
                         .into();
             }
             OrbSector::Inspect => {
-                state.inspect_continuity_open = !state.inspect_continuity_open;
-                state.orb_toast = "Toggled the Four-Plane Continuity Inspector".into();
+                crate::components::toggle_dev_inspector(state);
             }
             OrbSector::More => {
                 jump_to_stage(state, VolumeStage::Settings);

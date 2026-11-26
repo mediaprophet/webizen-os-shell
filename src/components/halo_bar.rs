@@ -1,3 +1,7 @@
+// Copyright (c) 2026 Timothy Charles Holborn.
+// SPDX-License-Identifier: CC-BY-NC-ND-4.0
+
+use super::dev_inspector::toggle_dev_inspector;
 use super::holo_glyph::{eval_vibe_icon_omega, HoloGlyphIcon, HoloGlyphKind};
 use crate::state::{ShellState, VolumeStage};
 use aether::prelude::*;
@@ -50,6 +54,7 @@ pub fn HaloBar(mut state: Signal<ShellState>) -> Element {
     let os_user = s.os_username.clone();
     let spatial = s.spatial_mode;
     let launcher_open = s.launcher_open;
+    let inspect_open = s.dev_inspector_open;
     let control_center_open = s.control_center_drawer_open;
     let animating = s.animate_icons && !s.reduced_motion;
     let omega = eval_vibe_icon_omega(&s.icon_vibe_formula);
@@ -98,6 +103,28 @@ pub fn HaloBar(mut state: Signal<ShellState>) -> Element {
                     }
                 }
                 span { class: "label", "Commands" }
+            }
+            button {
+                r#type: "button",
+                class: "fav inspect-launch",
+                id: "open-inspect",
+                title: "Inspect technical details (F12)",
+                aria_keyshortcuts: "F12",
+                aria_expanded: if inspect_open { "true" } else { "false" },
+                aria_controls: "dev-inspector-drawer",
+                onclick: move |_| toggle_dev_inspector(&mut state.write()),
+                span {
+                    class: "orb",
+                    aria_hidden: "true",
+                    HoloGlyphIcon {
+                        kind: HoloGlyphKind::CommandOrb,
+                        active: inspect_open,
+                        animating,
+                        omega,
+                        high_contrast,
+                    }
+                }
+                span { class: "label", "Inspect" }
             }
             button {
                 r#type: "button",

@@ -97,96 +97,64 @@ pub fn BrowserVolume(mut state: Signal<ShellState>) -> Element {
             })
             .collect();
 
+    let bookmarks_open = state.read().bookmarks_drawer_open;
+    let engine_open = state.read().browser_engine_drawer_open;
+    let product_mode = match active_mode {
+        BrowserExecutionMode::TraditionalWeb => "Web",
+        BrowserExecutionMode::QualiaNative => "Spatial",
+        BrowserExecutionMode::HybridAugmented => "Hybrid",
+    };
+
     rsx! {
         div {
-            class: "settings-volume",
-            header {
-                class: "settings-head",
-                h3 { "Webizen Web Browser · Bundled Independent Product & Three-Mode Routing Engine" }
-                p {
-                    "Packaged out-of-the-box with the OS-Shell in storage/Qapps/Browser ({prod_did} · {prod_git}), yet maintained and updated as an independent product on its own Ed25519 release channel. Multiplexes three execution modes across Ring B (QualiaDB / Etalon / VibeScript) and Ring C (webizen-WWW-engine MPL-2.0 sibling worker)."
-                }
-            }
-
-            // 1. Independent Product Packaging & Hot-Swap Update Panel
-            dl {
-                class: "kv",
-                dt { "Independent Product ID" }
-                dd { "Browser v{prod_ver} (Latest channel release: v{prod_latest}) · {prod_did}" }
-                dt { "Source Repository DID" }
-                dd { class: "path", "{prod_git}" }
-                dt { "Installed Qap Location" }
-                dd { class: "path", "{prod_dir}" }
-                dt { "Ring C Worker Binary Slot" }
-                dd { class: "path", "{prod_worker} (MPL-2.0 sibling process · copied RGBA8 frames)" }
-                dt { "Independent Update Channel" }
-                dd { class: "path", "{prod_channel}" }
-                dt { "OS-Shell Service Leases" }
-                dd { "{prod_leases}" }
-                dt { "Product Update Status" }
-                dd { class: "path", "{prod_receipt}" }
-            }
-            div {
+            class: "browser-workspace",
+            nav {
+                class: "browser-toolbar",
+                aria_label: "Browser",
                 button {
                     r#type: "button",
-                    class: "sanctum-issue",
+                    class: "ribbon-btn",
+                    title: "Back",
                     onclick: move |_| {
-                        if let Some(sess) = session() {
-                            if let Ok(updated) = upgrade_browser_product_independent(&sess.host, "0.1.1") {
-                                let mut s = state.write();
-                                s.browser_product = updated;
-                                if let Ok(qaps) = sess.host.list_qapps() {
-                                    s.installed_qaps = qaps;
-                                }
+                        let mut s = state.write();
+                        if let Some(previous) = s.browser_history.get(1).cloned() {
+                            if let Some(target) = url_from_history_line(&previous) {
+                                let resolved = resolve_mode_for_uri(&target, s.browser_mode);
+                                s.browser_url = target.clone();
+                                s.browser_mode = resolved;
+                                address_draft.set(target);
                             }
                         }
                     },
-                    "Update Browser Product Independently (v0.1.0 -> v0.1.1 Atomic Hot-Swap)"
+                    "← Back"
                 }
-            }
-
-            // 2. Three-Mode Switcher (Traditional Web / QualiaDB Native / Hybrid Augmented Web)
-            section {
-                class: "id-list",
-                h4 { "Select Browser Execution Mode (3 Modes)" }
-                div {
-                    class: "plane-grid",
-                    for mode in BrowserExecutionMode::ALL {
-                        {
-                            let is_active = active_mode == mode;
-                            let badge = if is_active { "ACTIVE MODE" } else { "SWITCH TO MODE" };
-                            let m_title = mode.title();
-                            let m_engine = mode.engine_and_ring();
-                            let m_desc = mode.description();
-                            rsx! {
-                                div {
-                                    key: "{m_title}",
-                                    class: "plane-card",
-                                    h5 { "[{badge}] {m_title}" }
-                                    p { "{m_engine}" }
-                                    p { "{m_desc}" }
-                                    button {
-                                        r#type: "button",
-                                        class: "sanctum-issue",
-                                        onclick: move |_| {
-                                            state.write().browser_mode = mode;
-                                        },
-                                        "Activate {m_title}"
-                                    }
-                                }
+                button {
+                    r#type: "button",
+                    class: "ribbon-btn",
+                    title: "Forward",
+                    onclick: move |_| {
+                        let s = state.write();
+                        if let Some(next) = s.browser_history.first().cloned() {
+                            if let Some(target) = url_from_history_line(&next) {
+                                address_draft.set(target);
                             }
                         }
-                    }
+                    },
+                    "→ Forward"
                 }
-            }
-
-            // 3. Address Bar & Mode-Aware Navigation
-            section {
-                class: "id-list",
-                h4 { "Active Mode: {mode_title} — {mode_engine}" }
-                p { class: "muted", "{mode_desc}" }
+                button {
+                    r#type: "button",
+                    class: "ribbon-btn",
+                    title: "Reload",
+                    onclick: move |_| {
+                        let current = state.read().browser_url.clone();
+                        address_draft.set(current.clone());
+                        state.write().browser_url = current;
+                    },
+                    "↻ Reload"
+                }
                 form {
-                    class: "input-row",
+                    class: "browser-address",
                     onsubmit: move |evt| {
                         evt.prevent_default();
                         let target = address_draft.read().trim().to_owned();
@@ -208,15 +176,11 @@ pub fn BrowserVolume(mut state: Signal<ShellState>) -> Element {
                         );
                         address_draft.set(target);
                     },
-                    onreset: move |evt| {
-                        evt.prevent_default();
-                        address_draft.set(state.read().browser_url.clone());
-                    },
                     input {
                         class: "input-field",
                         value: "{url}",
-                        "aria-label": "Browser address",
-                        placeholder: "Enter qualia://, webizen://, or https:// URI…",
+                        "aria-label": "Address or search",
+                        placeholder: "Search or enter an address…",
                         oninput: move |evt| address_draft.set(evt.value()),
                         onchange: move |evt| address_draft.set(evt.value()),
                         onpaste: move |evt| {
@@ -232,70 +196,134 @@ pub fn BrowserVolume(mut state: Signal<ShellState>) -> Element {
                             state.write().clipboard_toast = resource_clipboard_notice("Cut", text.as_deref());
                         },
                     }
-                    button {
-                        r#type: "submit",
-                        class: "sanctum-issue",
-                        "Navigate & Route"
-                    }
-                    button {
-                        r#type: "reset",
-                        class: "ribbon-btn",
-                        "Reset address"
-                    }
+                    button { r#type: "submit", class: "sanctum-issue", "Go" }
                 }
-                if !clipboard_toast.is_empty() {
-                    p { class: "muted", role: "status", "{clipboard_toast}" }
+                button {
+                    r#type: "button",
+                    class: if bookmarks_open { "ribbon-btn active" } else { "ribbon-btn" },
+                    onclick: move |_| {
+                        let mut s = state.write();
+                        s.bookmarks_drawer_open = !s.bookmarks_drawer_open;
+                    },
+                    "Bookmarks"
+                }
+                button {
+                    r#type: "button",
+                    class: if engine_open { "ribbon-btn active" } else { "ribbon-btn" },
+                    onclick: move |_| {
+                        let mut s = state.write();
+                        s.browser_engine_drawer_open = !s.browser_engine_drawer_open;
+                    },
+                    "Engine"
                 }
                 div {
-                    class: "orb-sectors",
-                    button {
-                        r#type: "button",
-                        class: "ribbon-btn",
-                        onclick: move |_| {
-                            let mut s = state.write();
-                            s.browser_url = "qualia://chora/universe".into();
-                            address_draft.set(s.browser_url.clone());
-                            s.browser_mode = BrowserExecutionMode::QualiaNative;
-                        },
-                        "Preset: qualia://chora/universe (Mode 2 Native)"
-                    }
-                    button {
-                        r#type: "button",
-                        class: "ribbon-btn",
-                        onclick: move |_| {
-                            let mut s = state.write();
-                            s.browser_url = "https://dev.civics.au/site-planner".into();
-                            address_draft.set(s.browser_url.clone());
-                            s.browser_mode = BrowserExecutionMode::HybridAugmented;
-                        },
-                        "Preset: https://dev.civics.au (Mode 3 Hybrid)"
-                    }
-                    button {
-                        r#type: "button",
-                        class: "ribbon-btn",
-                        onclick: move |_| {
-                            let mut s = state.write();
-                            s.browser_url = "https://web.civics.au/databox".into();
-                            address_draft.set(s.browser_url.clone());
-                            s.browser_mode = BrowserExecutionMode::HybridAugmented;
-                        },
-                        "Preset: https://web.civics.au (Mode 3 Solid Hybrid)"
-                    }
-                    button {
-                        r#type: "button",
-                        class: "ribbon-btn",
-                        onclick: move |_| {
-                            let mut s = state.write();
-                            s.browser_url = "https://example.org".into();
-                            address_draft.set(s.browser_url.clone());
-                            s.browser_mode = BrowserExecutionMode::TraditionalWeb;
-                        },
-                        "Preset: https://example.org (Mode 1 Pure Traditional)"
+                    class: "browser-mode-switch",
+                    role: "group",
+                    aria_label: "Mode",
+                    for (mode, label) in [
+                        (BrowserExecutionMode::TraditionalWeb, "Web"),
+                        (BrowserExecutionMode::QualiaNative, "Spatial"),
+                        (BrowserExecutionMode::HybridAugmented, "Hybrid"),
+                    ] {
+                        {
+                            let selected = active_mode == mode;
+                            rsx! {
+                                button {
+                                    key: "{label}",
+                                    r#type: "button",
+                                    class: if selected { "ribbon-btn active" } else { "ribbon-btn" },
+                                    onclick: move |_| state.write().browser_mode = mode,
+                                    "{label}"
+                                }
+                            }
+                        }
                     }
                 }
             }
+            if !clipboard_toast.is_empty() {
+                p { class: "muted", role: "status", "{clipboard_toast}" }
+            }
+            if bookmarks_open {
+                aside {
+                    class: "browser-popover",
+                    h4 { "Bookmarks" }
+                    ul {
+                        for bm in &bookmarks {
+                            {
+                                let bm_uri = bm.uri.clone();
+                                let bm_title_val = bm.title.clone();
+                                rsx! {
+                                    li {
+                                        key: "{bm.bookmark_id}",
+                                        button {
+                                            r#type: "button",
+                                            class: "ribbon-btn",
+                                            onclick: move |_| {
+                                                let mut s = state.write();
+                                                s.browser_url = bm_uri.clone();
+                                                address_draft.set(bm_uri.clone());
+                                                s.bookmarks_drawer_open = false;
+                                            },
+                                            "{bm_title_val}"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if engine_open {
+                details {
+                    class: "tech-details-drawer",
+                    open: true,
+                    summary { "Engine status" }
+                    p { "Mode: {product_mode} · {mode_title}" }
+                    p { class: "muted", "{mode_desc}" }
+                    p { class: "path", "Worker: {prod_worker}" }
+                    p { class: "muted", "{prod_receipt}" }
+                    button {
+                        r#type: "button",
+                        class: "ribbon-btn",
+                        onclick: move |_| {
+                            if let Some(sess) = session() {
+                                if let Ok(updated) = upgrade_browser_product_independent(&sess.host, "0.1.1") {
+                                    let mut s = state.write();
+                                    s.browser_product = updated;
+                                    if let Ok(qaps) = sess.host.list_qapps() {
+                                        s.installed_qaps = qaps;
+                                    }
+                                }
+                            }
+                        },
+                        "Check for engine update"
+                    }
+                }
+            }
+            div {
+                class: "browser-viewport",
+                BrowserChoraSurface { state }
+            }
 
-            BrowserChoraSurface { state }
+            details {
+                class: "tech-details-drawer",
+                summary { "Bookmarks, groups, and page notes" }
+                p { class: "muted", "Active mode: {mode_title} · {mode_engine}" }
+                dl {
+                    class: "kv",
+                    dt { "Browser version" }
+                    dd { "v{prod_ver} (channel v{prod_latest})" }
+                    dt { "Product id" }
+                    dd { class: "path", "{prod_did}" }
+                    dt { "Source" }
+                    dd { class: "path", "{prod_git}" }
+                    dt { "Install folder" }
+                    dd { class: "path", "{prod_dir}" }
+                    dt { "Update channel" }
+                    dd { class: "path", "{prod_channel}" }
+                    dt { "Leases" }
+                    dd { "{prod_leases}" }
+                }
 
             // 4. Mode 3 Hybrid Capability Bridge (QualiaDB Capabilities Embedded in Traditional Web Pages)
             section {
@@ -679,15 +707,23 @@ pub fn BrowserVolume(mut state: Signal<ShellState>) -> Element {
 
             section {
                 class: "id-list",
-                h4 { "Active Reach & Mode Routing Log" }
+                h4 { "Recent pages" }
                 ul {
                     for h in history {
                         li { "{h}" }
                     }
                 }
             }
+            }
         }
     }
+}
+
+fn url_from_history_line(line: &str) -> Option<String> {
+    let after_title = line.split_once("] ")?.1;
+    let url = after_title.split_once(" — ").map(|(url, _)| url).unwrap_or(after_title);
+    let url = url.trim();
+    (!url.is_empty()).then(|| url.to_string())
 }
 
 fn annotation_assertion(kind: &str) -> (ContextualAssertionView, AssertionEvidenceLevel) {

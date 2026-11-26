@@ -4,6 +4,7 @@
 use super::{
     admin::{build_appliance_packages, ApplianceProfilesPanel, HostDaemonPanel},
     llm_agents::LlmAndAgentManagementPanel,
+    theme_studio::ThemeStudio,
 };
 use crate::state::{session, SettingsSection, ShellState, ALL_SETTINGS_SECTIONS};
 use aether::{aether_core::try_consume_context, prelude::*};
@@ -348,8 +349,8 @@ fn SettingsSectionBody(section: SettingsSection, mut state: Signal<ShellState>) 
                 div {
                     header {
                         class: "settings-head",
-                        h3 { "6. Appearance & Access · Synth Theme Scope, Live UI Zoom & VibeScript 3D Icons" }
-                        p { "Accessible presets generated with Synth hypermedia.layout.bind_theme_scope. Adjust live Blitz/Parley text & UI scaling (85%–175%, or Ctrl+= / Ctrl+- / Ctrl+0), WCAG AAA High-Contrast themes, and VibeScript-driven Etalon 3D/Vector icon kinetics." }
+                        h3 { "Appearance & Access" }
+                        p { "Choose a look, set text size, and answer a short comfort questionnaire. Suggested looks stay on this device until you turn one on." }
                     }
                     section {
                         class: "id-list",
@@ -469,32 +470,8 @@ fn SettingsSectionBody(section: SettingsSection, mut state: Signal<ShellState>) 
                             }
                         }
                     }
-                    section {
-                        class: "id-list",
-                        h4 { "Colour & Contrast Theme Presets" }
-                        div {
-                            class: "input-row",
-                            button {
-                                r#type: "button",
-                                class: "sanctum-issue",
-                                onclick: move |_| state.write().theme_preset = "theme-holosonic",
-                                "Preset 1: Holosonic Dark (Default Spatial)"
-                            }
-                            button {
-                                r#type: "button",
-                                class: "sanctum-issue",
-                                onclick: move |_| state.write().theme_preset = "theme-obsidian",
-                                "Preset 2: High-Contrast Obsidian (WCAG AAA)"
-                            }
-                            button {
-                                r#type: "button",
-                                class: "sanctum-issue",
-                                onclick: move |_| state.write().theme_preset = "theme-commons",
-                                "Preset 3: Permissive Commons Teal"
-                            }
-                        }
-                        p { class: "muted", "Active Theme Preset: {theme_preset} · UI Scale: {ui_scale_percent}% · {motion_label}" }
-                    }
+                    ThemeStudio { state }
+                    p { class: "muted", "Active look: {theme_preset} · UI scale: {ui_scale_percent}% · {motion_label}" }
                     WorkspaceSave { state }
                 }
             }

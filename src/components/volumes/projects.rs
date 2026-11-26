@@ -16,10 +16,20 @@ pub fn ProjectsVolume(state: Signal<ShellState>) -> Element {
             class: "settings-volume",
             header {
                 class: "settings-head",
-                h3 { "Projects · Cooperative Work-Graph & Nine-Stage Contribution Lifecycle" }
-                p {
-                    "Transport-neutral cooperative project ledger (qualia-cooperative-core & work-graph). Covers Foundational Wellbeing & Human-Rights Protection, Community Grounds & Bioregional Infrastructure, and QualiaDB & Webizen Ecosystem Advancement."
-                }
+                h3 { "Projects" }
+                p { "Shared work, roles, and the current milestone." }
+            }
+            ol {
+                class: "project-milestones",
+                li { class: "live", "1. Agree the work" }
+                li { "2. Log time and materials" }
+                li { "3. Review" }
+                li { "4. Accept" }
+                li { "5. Bound the obligation" }
+                li { "6. Draw from pre-funded credit" }
+                li { "7. Reconcile" }
+                li { "8. Settle" }
+                li { "9. Close and licence" }
             }
             CooperativeProjectArchetypesPanel { state }
             section {

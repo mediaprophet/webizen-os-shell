@@ -7,9 +7,7 @@ use aether::refract::{
 };
 
 use crate::state::{session, ShellState};
-use webizen_ua_os::{
-    validate_human_centric_host_nomenclature, IdentifierFabricPlane, PLANE_NATURAL_AGENT_TITLE,
-};
+use webizen_ua_os::{validate_human_centric_host_nomenclature, IdentifierFabricPlane};
 
 #[component]
 pub fn TalkVolume(mut state: Signal<ShellState>) -> Element {
@@ -42,38 +40,23 @@ pub fn TalkVolume(mut state: Signal<ShellState>) -> Element {
 
     rsx! {
         div {
-            class: "settings-volume",
-            header {
-                class: "settings-head",
-                h3 { "Talk · Humans-First Pairwise Conversation (Claim & Relation Plane)" }
-                p {
-                    "A person waiting for a person. Messages travel over Socially Defined Networking (QDNF) pairwise channels with post-quantum ML-KEM + Ed25519/ML-DSA dual signatures. An AI chatbot is an instrument on the Tool plane — never a fake human peer."
-                }
-            }
-            div {
-                class: "input-row",
-                input {
-                    class: "input-field",
-                    value: "{input}",
-                    placeholder: "Write a human-to-human claim or message…",
-                    oninput: move |evt| state.write().talk_input = evt.value(),
-                }
-                button {
-                    r#type: "button",
-                    class: "sanctum-issue",
-                    onclick: move |_| {
-                        let mut s = state.write();
-                        let msg = s.talk_input.trim().to_string();
-                        if !msg.is_empty() {
-                            s.talk_messages.push(format!("[NaturalAgent -> Peer · NQuin48 sealed] {msg}"));
-                            s.talk_input.clear();
+            class: "comms-workspace",
+            aside {
+                class: "comms-pane-list",
+                h3 { "Talk" }
+                p { class: "muted", "People you are talking with" }
+                ul {
+                    li {
+                        button {
+                            r#type: "button",
+                            class: "ribbon-btn active",
+                            "Human peer"
                         }
-                    },
-                    "Send to Human Peer"
+                    }
                 }
                 button {
                     r#type: "button",
-                    class: "sanctum-issue",
+                    class: "ribbon-btn",
                     onclick: move |_| {
                         let mut s = state.write();
                         s.talk_agent_tool_active = !s.talk_agent_tool_active;
@@ -83,10 +66,42 @@ pub fn TalkVolume(mut state: Signal<ShellState>) -> Element {
                             s.active_plane = IdentifierFabricPlane::ClaimOpinion;
                         }
                     },
-                    "Toggle Governed AI Tool"
+                    if tool_on { "Hide helper tools" } else { "Show helper tools" }
                 }
+                p { class: "muted", "{tool_label}" }
+                p { class: "muted", "Helper: {active_model}" }
             }
-            p { class: "muted", "{tool_label} · Active Local Instrument: {active_model}" }
+            section {
+                class: "comms-pane-thread",
+                h3 { "Conversation" }
+                ul {
+                    class: "comms-messages",
+                    for m in messages {
+                        li { "{m}" }
+                    }
+                }
+                div {
+                    class: "input-row comms-compose",
+                    input {
+                        class: "input-field",
+                        value: "{input}",
+                        placeholder: "Write a message…",
+                        oninput: move |evt| state.write().talk_input = evt.value(),
+                    }
+                    button {
+                        r#type: "button",
+                        class: "sanctum-issue",
+                        onclick: move |_| {
+                            let mut s = state.write();
+                            let msg = s.talk_input.trim().to_string();
+                            if !msg.is_empty() {
+                                s.talk_messages.push(format!("You: {msg}"));
+                                s.talk_input.clear();
+                            }
+                        },
+                        "Send"
+                    }
+                }
             if tool_on {
                 section {
                     class: "id-list",
@@ -141,14 +156,6 @@ pub fn TalkVolume(mut state: Signal<ShellState>) -> Element {
                     }
                 }
             }
-            section {
-                class: "id-list",
-                h4 { "Conversation Claims & Provenance Stream" }
-                ul {
-                    for m in messages {
-                        li { "{m}" }
-                    }
-                }
             }
         }
     }
@@ -164,47 +171,54 @@ pub fn MailVolume(mut state: Signal<ShellState>) -> Element {
 
     rsx! {
         div {
-            class: "settings-volume",
-            header {
-                class: "settings-head",
-                h3 { "Mail · Relationship-Scoped Pairwise Locators (Handle & Claim Plane)" }
-                p {
-                    "Each relationship binds a directional pairwise locator (A -> B != B -> A; no-proxy-launder enforced). If a traditional DNS domain expires, the person and relationship history never fade."
-                }
-            }
-            div {
-                class: "input-row",
-                input {
-                    class: "input-field",
-                    value: "{locator}",
-                    placeholder: "Recipient pairwise locator (did:qi:locator:...)",
-                    oninput: move |evt| state.write().mail_to_locator = evt.value(),
-                }
-                input {
-                    class: "input-field",
-                    value: "{subject}",
-                    placeholder: "Message subject or QECP credential summary…",
-                    oninput: move |evt| state.write().mail_subject = evt.value(),
-                }
-                button {
-                    r#type: "button",
-                    class: "sanctum-issue",
-                    onclick: move |_| {
-                        let mut s = state.write();
-                        let to = s.mail_to_locator.trim().to_string();
-                        let subj = s.mail_subject.trim().to_string();
-                        if !to.is_empty() && !subj.is_empty() {
-                            s.mail_messages.push(format!("Sent [Pairwise {to}] · {subj} (48-byte NQuin receipt committed)"));
-                        }
-                    },
-                    "Compose & Seal Mail"
+            class: "comms-workspace",
+            aside {
+                class: "comms-pane-list",
+                h3 { "Mail" }
+                p { class: "muted", "Threads" }
+                ul {
+                    if messages.is_empty() {
+                        li { class: "muted", "No letters yet" }
+                    }
+                    for m in messages.iter().rev().take(12) {
+                        li { "{m}" }
+                    }
                 }
             }
             section {
-                class: "id-list",
-                h4 { "Relationship-Scoped Inbox ({messages.len()} threads)" }
+                class: "comms-pane-thread",
+                h3 { "Read and write" }
+                div {
+                    class: "input-row",
+                    input {
+                        class: "input-field",
+                        value: "{locator}",
+                        placeholder: "To (person or address)…",
+                        oninput: move |evt| state.write().mail_to_locator = evt.value(),
+                    }
+                    input {
+                        class: "input-field",
+                        value: "{subject}",
+                        placeholder: "Subject…",
+                        oninput: move |evt| state.write().mail_subject = evt.value(),
+                    }
+                    button {
+                        r#type: "button",
+                        class: "sanctum-issue",
+                        onclick: move |_| {
+                            let mut s = state.write();
+                            let to = s.mail_to_locator.trim().to_string();
+                            let subj = s.mail_subject.trim().to_string();
+                            if !to.is_empty() && !subj.is_empty() {
+                                s.mail_messages.push(format!("To {to} · {subj}"));
+                            }
+                        },
+                        "Send"
+                    }
+                }
                 ul {
-                    for m in messages {
+                    class: "comms-messages",
+                    for m in messages.iter() {
                         li { "{m}" }
                     }
                 }
@@ -226,9 +240,9 @@ pub fn DirectoryVolume(mut state: Signal<ShellState>) -> Element {
             class: "settings-volume",
             header {
                 class: "settings-head",
-                h3 { "{PLANE_NATURAL_AGENT_TITLE} · Social Book & Pairwise Introductions" }
+                h3 { "Directory" }
                 p {
-                    "Living beings are framed strictly as living-SHACL records (D_living), disjoint from owl:Thing, and never reduced to a Thing, Object, or raw DID. Organisations and AI instruments are kept in distinct categories."
+                    "People and introductions. Organisations and helper tools stay in their own lists."
                 }
             }
             div {

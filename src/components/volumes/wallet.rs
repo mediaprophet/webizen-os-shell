@@ -13,10 +13,23 @@ pub fn WalletVolume(state: Signal<ShellState>) -> Element {
             class: "settings-volume",
             header {
                 class: "settings-head",
-                h3 { "Wallet · Lightning · Nym · eCash (XEC) · Tokens & Permissive Commons" }
-                p { "Chain policy: Prefer Lightning, Nym Mixnet, eCash (XEC), and semantic tokens (QualiaPQ-Ledger / ML-DSA-65). ETH is not a target. Wallet handle != who; an AI instrument may propose as a tool, but only a human signs via KeyVault." }
+                h3 { "Wallet" }
+                p { "Balances, send, and receive. You sign; helpers only propose." }
             }
-            p { class: "muted", "Qualia KeyVault sidecar status: {daemon}" }
+            div {
+                class: "plane-grid wallet-balances",
+                div { class: "plane-card", h5 { "Lightning" } p { "0 sats ready" } }
+                div { class: "plane-card", h5 { "Mixnet" } p { "Off until the sidecar reports" } }
+                div { class: "plane-card", h5 { "eCash" } p { "0 units" } }
+            }
+            form {
+                class: "input-row wallet-send",
+                input { class: "input-field", placeholder: "Send to (invoice or address)…" }
+                input { class: "input-field", placeholder: "Amount" }
+                button { r#type: "button", class: "sanctum-issue", "Send" }
+                button { r#type: "button", class: "ribbon-btn", "Receive" }
+            }
+            p { class: "muted", "Key vault: {daemon}" }
             ContributionLifecyclePreview {}
             ProviderCreditInspector {}
             div {

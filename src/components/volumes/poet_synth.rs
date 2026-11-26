@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Timothy Charles Holborn.
 // SPDX-License-Identifier: CC-BY-NC-ND-4.0
 
+use super::theme_studio::{SharedThemeCollectionPanel, ThemeCodesignerPanel};
 use crate::components::viewports::Holo10dViewport;
 use crate::state::{session, ShellState};
 use aether::{aether_core::try_consume_context, prelude::*};
@@ -145,25 +146,39 @@ pub fn PoetSynthVolume(mut state: Signal<ShellState>) -> Element {
             class: "settings-volume",
             header {
                 class: "settings-head",
-                h3 { "Poet · Unified Native Authoring & Hypermedia Production (Synth) Workbench" }
-                p {
-                    "Runs VibeScript (vibe-0.1 / proposed 0.2) reactive cells, deterministic NLP gazetteer NQuin48 sealing, and the {HYPERMEDIA_MORPHISM_COUNT}-morphism Hypermedia Production catalog directly in native mode (TargetProfileMask::NATIVE_DESKTOP) — no separate Synth app required."
+                h3 { "Poet Studio" }
+                p { "Write a document, run a formula, and preview 3D work on the canvas." }
+            }
+            textarea {
+                class: "input-field poet-editor-canvas",
+                aria_label: "Document editor",
+                value: "{document_input}",
+                rows: "12",
+                placeholder: "Start writing…",
+                oninput: move |evt| {
+                    let mut shell = state.write();
+                    shell.poet_doc_input = evt.value();
+                    shell.selection_range_label.clear();
+                },
+            }
+            Holo10dViewport { state, specimen_label: "Studio canvas".to_string() }
+            ThemeCodesignerPanel { state }
+            SharedThemeCollectionPanel { state }
+            details {
+                class: "tech-details-drawer",
+                summary { "Studio details" }
+                dl {
+                    class: "kv",
+                    dt { "Lexicon" }
+                    dd { "{lexicon_status}" }
+                    dt { "Providers" }
+                    dd { "{provider_count}" }
+                    dt { "Catalog" }
+                    dd { "{HYPERMEDIA_MORPHISM_COUNT} operations across {pillar_count} areas" }
+                    dt { "Local models" }
+                    dd { "{llm_count}" }
                 }
             }
-            dl {
-                class: "kv",
-                dt { "VibeScript Engine" }
-                dd { "vibe-0.1 / vibe-host-0.1 · 42 MiB SlgArena Sentinel budget · Zero V8 / Zero JIT" }
-                dt { "Lexicon Pack" }
-                dd { "{lexicon_status}" }
-                dt { "Native Etalon Providers" }
-                dd { "{provider_count} namespaces admitted on TargetProfileMask::NATIVE_DESKTOP" }
-                dt { "Hypermedia Catalog" }
-                dd { "{HYPERMEDIA_MORPHISM_COUNT} hypermedia.* morphisms across {pillar_count} domain pillars (.hmc / .10d v2 HOLO / .m64 / .emf / .qac / .q42)" }
-                dt { "Unified SLD/LLM Vault" }
-                dd { "{llm_count} local models discovered (QUALIA_LLM_VAULT / C:\\LLM_files / Models)" }
-            }
-            Holo10dViewport { state, specimen_label: "Poet authoring specimen".to_string() }
             form {
                 class: "input-row",
                 onsubmit: move |evt| {

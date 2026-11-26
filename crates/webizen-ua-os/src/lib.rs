@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Timothy Charles Holborn.
+// SPDX-License-Identifier: CC-BY-NC-ND-4.0
+
 //! Shared User-Agent OS Runtime (`webizen-ua-os`) for Guest (app on an existing
 //! Windows / macOS / Linux Device OS) and Appliance (overlay on unmodified Debian 13 Trixie).
 //!
@@ -23,6 +26,9 @@
 
 mod browser_app;
 mod daemon;
+pub mod emf_ui_field;
+pub mod forge_theme_shaders;
+pub mod llm_theme_codesigner;
 pub mod deb_builder;
 pub mod desktop_appliance;
 pub mod holo_10d_specimen;
@@ -40,11 +46,15 @@ pub mod os_jobs_leases;
 pub mod os_orchestrator;
 mod os_qcdn_mirror;
 mod poet_synth;
+pub mod semantic_scene_graph;
 pub mod portability_qecp;
 mod qap_host;
 pub mod qualia_host_foundation;
 pub mod sanctuary_onboarding;
 mod semantic_fs;
+pub mod theme_acoustics;
+pub mod theme_cartridge;
+pub mod theme_discovery_questionnaire;
 mod session;
 mod updater;
 pub mod wellfair_specialist_portal;
@@ -108,7 +118,20 @@ pub use identifiers::{
     PLANE_CLAIM_OPINION_TITLE, PLANE_INSTRUMENT_TITLE, PLANE_NATURAL_AGENT_TITLE,
     PLANE_SPATIOTEMPORAL_HANDLE_TITLE, VC_ORIGIN_INTEGRITY_DISCLAIMER,
 };
+pub use emf_ui_field::{
+    project_emf_ui_field, stokes_for_topology, EmfFieldCell, EmfUiField, EMF_CELL_BYTES,
+    HOLO_NODE_BYTES, MAX_EMF_CELLS, MAX_HOLO_NODES,
+};
+pub use forge_theme_shaders::{
+    shader_source_for_profile, validate_profile_wgsl, REFRACTIVE_CURVED_GLASS_BLOOM,
+    VOLUMETRIC_SPECTRAL_HDR, WIREFRAME_PHOSPHOR_SCANLINE,
+};
 pub use intent_router::{classify_semantic_intent, ClassifiedSemanticIntent, SemanticIntentAction};
+pub use llm_theme_codesigner::{
+    activate_collected_bundle, co_design_theme_with_llm, export_shared_theme_bundle,
+    import_shared_theme_bundle, verify_designed_theme, SharedThemeCartridgeBundle,
+    ThemeCollectionState, ThemeCodesignReceipt,
+};
 pub use llm_management::{
     compile_principal_sub_agent_did, AgentInvocationTurnReceipt, EnvironmentAgentRosterEntry,
     ExternalLlmPlatformAccount, ExternalLlmProviderKind, ExternalRemoteConsentRule,
@@ -152,6 +175,7 @@ pub use poet_synth::{
     core_semantic_instruments_catalog, discover_unified_llm_vault, hypermedia_pillar_catalog,
     list_native_vibe_providers, poet_analyze_and_seal_gazetteer, poet_eval_native_cell,
     poet_eval_native_program, poet_open_lexicon_pack, produce_hypermedia_vibe,
+    export_theme_cartridge_hmc,
     run_local_model_readiness_probe, shacl_extension_families_catalog, GazetteerSpanHit,
     HypermediaPillarSummary, HypermediaProduceReceipt, LocalLlmModelEntry,
     LocalModelReadinessReceipt, NativeProviderSummary, PoetCellEntry, PoetEvalResult,
@@ -178,6 +202,22 @@ pub use qualia_host_foundation::{
     record_authoring_source_review, run_governed_vibe_source, AdoptedQualiaFoundation,
     AuthoringWorkflowSnapshot, GovernedVibeActionReport, QapPoetGraphHost,
     VibeExecutionReceiptSummary,
+};
+pub use semantic_scene_graph::{
+    apply_semantic_intent, project_core_volume_graph, SemanticIntent, SemanticNodeKind,
+    SemanticSceneGraph, SemanticUiNode,
+};
+pub use theme_acoustics::{render_theme_acoustic_frame, ThemeAcousticFrame};
+pub use theme_cartridge::{
+    auto_repair_wcag_contrast, builtin_cartridges, contrast_ratio,
+    project_semantic_scene_with_cartridge, verify_cartridge_affordance_equivalence,
+    PostProcessShaderProfile, SpatialManifoldTopology, ThemeCartridgeManifest,
+    ThemeCartridgeRegistry,
+};
+pub use theme_discovery_questionnaire::{
+    recommend_environment_options, AcousticFeedbackPreference, ColorVisionProfile,
+    ContrastGlareComfort, MotionComfort, RecommendedEnvironmentOption, UserEnvironmentQuestionnaire,
+    WorkspaceDensityStyle, SENSITIVITY_PRIVATE,
 };
 pub use sanctuary_onboarding::{
     build_sanctuary_onboarding_state, build_seeded_civics_au_human_rights_observatory,
