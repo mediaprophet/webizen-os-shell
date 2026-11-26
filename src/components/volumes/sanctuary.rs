@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: CC-BY-NC-ND-4.0
 
 use super::theme_studio::EnvironmentQuestionnairePanel;
+use crate::components::viewports::Holo10dViewport;
 use crate::state::{session, ShellState};
 use aether::prelude::*;
 use webizen_ua_os::{
@@ -71,14 +72,42 @@ pub fn SanctuaryVolume(mut state: Signal<ShellState>) -> Element {
                 h3 { "Keep" }
                 p { "Private files, unlock status, and a guided recovery wizard. Looks and access comfort live here too." }
             }
+            div {
+                class: "vault-overview-grid",
+                div {
+                    class: "plane-grid",
+                    article {
+                        class: "vault-status-card",
+                        h5 { "Vault Status" }
+                        p { "Protected on This Device" }
+                    }
+                    article {
+                        class: "vault-status-card",
+                        h5 { "Family & Guardian Recovery" }
+                        p { "{threshold} of {total} Guardians Ready" }
+                    }
+                    article {
+                        class: "vault-status-card",
+                        h5 { "Phone Co-Signer" }
+                        p {
+                            if paired { "Paired & Attested" } else { "Ready to pair when you choose" }
+                        }
+                    }
+                }
+                Holo10dViewport {
+                    state,
+                    specimen_label: "Guardian crest".to_string(),
+                    specimen_id: "sanctuary-guardian-crest".to_string(),
+                }
+            }
             EnvironmentQuestionnairePanel { state }
 
             section {
                 class: "id-list",
                 aria_label: "7-Screen New-User Onboarding Wizard",
-                h4 { "7-Screen New-User Onboarding Wizard (Desktop & Mobile Progressive Confidence Ladder)" }
+                h4 { "Guided Setup & Security Checklist (7 Steps)" }
                 p {
-                    "Guides a new user from initial hardware probe (Screen 1) through Four-Plane anchor, Dual-PIN Sanctuary Keep, Mobile AVF Pocket Co-Signer pairing, Multi-Account shared-machine seat assignment, and Always-On Persistence Mesh to Tier 3 High-Assurance Confidence (< 1.0)."
+                    "Walk through device setup, private vault unlock, phone pairing, and people who share this computer — one calm step at a time."
                 }
                 div {
                     class: "sanctuary-vault-grid",
@@ -114,9 +143,9 @@ pub fn SanctuaryVolume(mut state: Signal<ShellState>) -> Element {
             section {
                 class: "id-list",
                 aria_label: "Multi-Account Shared-Machine Seat Assignments",
-                h4 { "Multi-Account Shared-Machine Seat Assignments (OS Account != Principal Identity)" }
+                h4 { "People & Roles on This Computer" }
                 p {
-                    "Machine '{machine_registry.machine_hostname}' ({machine_registry.machine_anvil_np64_did}) hosts 4 isolated account seats across Personal, Fiduciary Clinical, Child Student, and Delegated Agent roles."
+                    "Each person or professional role on this computer gets their own isolated vault, even if you share the same computer login."
                 }
                 div {
                     class: "sanctuary-vault-grid",
@@ -166,10 +195,10 @@ pub fn SanctuaryVolume(mut state: Signal<ShellState>) -> Element {
 
             section {
                 class: "id-list",
-                aria_label: "VaultContainerV2 inspector",
-                h4 { "VaultContainerV2 · Four-slot policy inspector" }
+                aria_label: "Private storage compartments",
+                h4 { "Private Storage Compartments (Standard, High-Safety & Emergency Decoy)" }
                 p {
-                    "Structural policy metadata for the CBOR vault. The inspector keeps record counts private."
+                    "Your private files live in separate compartments so everyday notes, high-safety records, and an emergency decoy stay distinct."
                 }
                 p {
                     class: "muted",
@@ -245,9 +274,9 @@ pub fn SanctuaryVolume(mut state: Signal<ShellState>) -> Element {
             section {
                 class: "id-list",
                 aria_label: "Shamir social guardianship recovery",
-                h4 { "{threshold}-of-{total} Shamir recovery rehearsal" }
+                h4 { "Practice a Family & Guardian Recovery" }
                 p {
-                    "Select fixture shares to verify threshold reconstruction. The rehearsal uses public test material held on this device."
+                    "Select {threshold} of {total} guardian shares to practice rebuilding access. This rehearsal uses public test material held on this device."
                 }
                 form {
                     onsubmit: move |event| {

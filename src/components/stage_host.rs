@@ -38,6 +38,7 @@ pub fn StageHost(mut state: Signal<ShellState>) -> Element {
     let ui_scale_percent = s.ui_scale_percent;
     let high_contrast = s.theme_preset == "theme-obsidian";
     let animating_icons = s.animate_icons && !s.reduced_motion;
+    let look_name = s.look_short_name();
     drop(s);
 
     let stage_class = match chrome_mode {
@@ -90,6 +91,16 @@ pub fn StageHost(mut state: Signal<ShellState>) -> Element {
                     class: "a11y-quick-bar",
                     role: "group",
                     aria_label: "Quick accessibility and text scaling controls",
+                    button {
+                        r#type: "button",
+                        class: "ribbon-btn look-cycle-btn",
+                        title: "Cycle appearance: Holosonic, Obsidian Contrast, Warm Commons, Holoslate Arc 3D, Cyber-Grid Matrix 3D, Spatial Commons 3D",
+                        aria_label: "Cycle Look theme ({look_name})",
+                        onclick: move |_| {
+                            state.write().cycle_look_theme();
+                        },
+                        "Look: {look_name}"
+                    }
                     button {
                         r#type: "button",
                         class: if inspector_open { "ribbon-btn active" } else { "ribbon-btn" },

@@ -8,6 +8,22 @@ use aether::prelude::*;
 #[component]
 pub fn WalletVolume(state: Signal<ShellState>) -> Element {
     let daemon = state.read().daemon_label.clone();
+    let mut lightning_sats = use_signal(|| 125_400i64);
+    let ecash_cents = use_signal(|| 45_000i64);
+    let community_credit_cents = use_signal(|| 25_000i64);
+    let mut recipient = use_signal(String::new);
+    let mut amount = use_signal(String::new);
+    let mut receive_open = use_signal(|| false);
+    let mut toast = use_signal(String::new);
+    let mut activity = use_signal(|| {
+        vec![
+            "Community Grounds Solar Microgrid · +150.00 AUD".to_string(),
+            "Local Co-op Grocer · -2,400 sats".to_string(),
+        ]
+    });
+    let lightning = lightning_sats();
+    let ecash_label = format!("{:.2} AUD-equiv", (ecash_cents() as f64) / 100.0);
+    let credit_label = format!("{:.2} AUD", (community_credit_cents() as f64) / 100.0);
     rsx! {
         div {
             class: "settings-volume",
@@ -18,26 +34,93 @@ pub fn WalletVolume(state: Signal<ShellState>) -> Element {
             }
             div {
                 class: "plane-grid wallet-balances",
-                div { class: "plane-card", h5 { "Lightning" } p { "0 sats ready" } }
-                div { class: "plane-card", h5 { "Mixnet" } p { "Off until the sidecar reports" } }
-                div { class: "plane-card", h5 { "eCash" } p { "0 units" } }
+                div { class: "plane-card", h5 { "Lightning" } p { "{lightning} sats ready" } }
+                div { class: "plane-card", h5 { "eCash" } p { "{ecash_label}" } }
+                div { class: "plane-card", h5 { "Community Credit" } p { "{credit_label}" } }
             }
             form {
                 class: "input-row wallet-send",
-                input { class: "input-field", placeholder: "Send to (invoice or address)…" }
-                input { class: "input-field", placeholder: "Amount" }
-                button { r#type: "button", class: "sanctum-issue", "Send" }
-                button { r#type: "button", class: "ribbon-btn", "Receive" }
+                input {
+                    class: "input-field",
+                    placeholder: "Send to (invoice or address)…",
+                    value: "{recipient}",
+                    oninput: move |evt| recipient.set(evt.value()),
+                }
+                input {
+                    class: "input-field",
+                    placeholder: "Amount",
+                    value: "{amount}",
+                    oninput: move |evt| amount.set(evt.value()),
+                }
+                button {
+                    r#type: "button",
+                    class: "sanctum-issue",
+                    onclick: move |_| {
+                        let to = recipient().trim().to_string();
+                        let raw = amount().trim().replace(',', "");
+                        let Ok(sats) = raw.parse::<i64>() else {
+                            toast.set("Enter a whole-number amount in sats.".into());
+                            return;
+                        };
+                        if to.is_empty() || sats <= 0 {
+                            toast.set("Choose a recipient and a positive amount.".into());
+                            return;
+                        }
+                        if sats > lightning_sats() {
+                            toast.set("That amount is more than your Lightning balance.".into());
+                            return;
+                        }
+                        lightning_sats.set(lightning_sats() - sats);
+                        activity.write().insert(0, format!("{to} · -{sats} sats"));
+                        amount.set(String::new());
+                        toast.set(format!("Sent {sats} sats to {to}."));
+                    },
+                    "Send"
+                }
+                button {
+                    r#type: "button",
+                    class: "ribbon-btn",
+                    onclick: move |_| receive_open.set(!receive_open()),
+                    "Receive"
+                }
+            }
+            if receive_open() {
+                article {
+                    class: "vault-status-card",
+                    h5 { "Receive Payment" }
+                    p { "Address for this computer" }
+                    p { class: "path", "webizen:ln:mercer-homestead-workstation" }
+                }
+            }
+            if !toast().is_empty() {
+                p { class: "muted", role: "status", "{toast}" }
+            }
+            h4 { "Recent Activity" }
+            table {
+                class: "wallet-activity-table",
+                thead {
+                    tr { th { "Activity" } }
+                }
+                tbody {
+                    for row in activity() {
+                        tr { td { "{row}" } }
+                    }
+                }
             }
             p { class: "muted", "Key vault: {daemon}" }
-            ContributionLifecyclePreview {}
-            ProviderCreditInspector {}
-            div {
-                class: "plane-grid",
-                div { class: "plane-card", h5 { "Lightning Network [Live]" } p { "Instant satoshi invoices & settlement after explicit human KeyVault signature." } }
-                div { class: "plane-card", h5 { "Nym Mixnet [Live]" } p { "Privacy-routed mixnet credentials bound to KeyVault mixnet role." } }
-                div { class: "plane-card", h5 { "eCash (XEC) & SLP RDF [Live]" } p { "Semantic token & RDF ledger settlement (xec-slp-rdf / semantic-tokens-xec)." } }
-                div { class: "plane-card", h5 { "Two-Loop Permissive Commons [Live]" } p { "Pre-funded credit allocations (no overdraft/loan conflation) & 9-stage obligation discharge." } }
+            details {
+                class: "tech-details-drawer",
+                open: true,
+                summary { "Shared Project Credits & Periodic Reconciliation" }
+                ContributionLifecyclePreview {}
+                ProviderCreditInspector {}
+                div {
+                    class: "plane-grid",
+                    div { class: "plane-card", h5 { "Lightning Network [Live]" } p { "Instant satoshi invoices & settlement after explicit human KeyVault signature." } }
+                    div { class: "plane-card", h5 { "Nym Mixnet [Live]" } p { "Privacy-routed mixnet credentials bound to KeyVault mixnet role." } }
+                    div { class: "plane-card", h5 { "eCash (XEC) & SLP RDF [Live]" } p { "Semantic token & RDF ledger settlement (xec-slp-rdf / semantic-tokens-xec)." } }
+                    div { class: "plane-card", h5 { "Two-Loop Permissive Commons [Live]" } p { "Pre-funded credit allocations (no overdraft/loan conflation) & 9-stage obligation discharge." } }
+                }
             }
         }
     }

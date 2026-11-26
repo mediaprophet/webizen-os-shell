@@ -1522,7 +1522,125 @@ summary {
 }
 
 .tech-details-drawer {
-  margin-top: 0.7rem;
+  margin-top: 1.1rem;
+  padding-top: 0.65rem;
+  border-top: 1px dashed color-mix(in srgb, var(--line-strong, #8aa) 45%, transparent);
+  opacity: 0.88;
+  font-size: 0.92em;
+  color: color-mix(in srgb, var(--ink) 78%, transparent);
+}
+
+.tech-details-drawer > summary {
+  cursor: pointer;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: color-mix(in srgb, var(--ink) 70%, transparent);
+}
+
+.browser-tabs-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  padding: 0.35rem 0.45rem 0.2rem;
+  align-items: center;
+}
+
+.browser-tab {
+  border: 1px solid var(--panel-border);
+  background: var(--surface-1);
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 0.28rem 0.75rem;
+  font: inherit;
+  cursor: pointer;
+}
+
+.browser-tab.active,
+.browser-tab[aria-current="true"] {
+  border-color: var(--teal);
+  background: var(--teal-dim);
+}
+
+.chat-bubble {
+  max-width: 78%;
+  margin: 0.35rem 0;
+  padding: 0.55rem 0.75rem;
+  border-radius: 1rem;
+  line-height: 1.35;
+}
+
+.chat-bubble.incoming {
+  background: color-mix(in srgb, var(--surface-2) 88%, var(--teal) 12%);
+  border-bottom-left-radius: 0.25rem;
+}
+
+.chat-bubble.outgoing {
+  margin-left: auto;
+  background: color-mix(in srgb, var(--teal-dim) 80%, var(--surface-1) 20%);
+  border-bottom-right-radius: 0.25rem;
+}
+
+.contact-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+  gap: 0.75rem;
+}
+
+.contact-card {
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  padding: 0.8rem;
+  background: var(--surface-1);
+}
+
+.wallet-activity-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0.6rem;
+}
+
+.wallet-activity-table th,
+.wallet-activity-table td {
+  text-align: left;
+  padding: 0.4rem 0.55rem;
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.studio-toolbar,
+.synth-preset-bar,
+.volume-subtabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0.45rem 0 0.7rem;
+}
+
+.library-split-workspace,
+.vault-overview-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(16rem, 1fr);
+  gap: 0.85rem;
+  align-items: start;
+}
+
+.wellbeing-hero,
+.vault-status-card {
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  padding: 0.9rem 1rem;
+  background: color-mix(in srgb, var(--surface-1) 86%, var(--teal) 14%);
+  margin-bottom: 0.85rem;
+}
+
+.look-cycle-btn {
+  font-weight: 650;
+}
+
+@media (max-width: 900px) {
+  .library-split-workspace,
+  .vault-overview-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .comms-workspace {

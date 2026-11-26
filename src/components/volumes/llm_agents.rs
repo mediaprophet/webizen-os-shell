@@ -54,10 +54,10 @@ pub fn LlmAndAgentManagementPanel(mut state: Signal<ShellState>) -> Element {
             // 1. Local Model Vault & .gguf -> .p64 v4 Conversion + GGUF Removal Pipeline
             section {
                 class: "id-list",
-                h4 { "1. Local LLM / SLD Model Vault & .gguf -> .p64 (16 KiB Page-Aligned) Conversion + Source GGUF Purge" }
+                h4 { "Local AI models on this computer" }
                 p {
                     class: "muted",
-                    "Every discovered .gguf model is converted into Etalon's 16 KiB page-aligned .p64 v4 (p64\\0) weight vault with 48-byte NQuin48 tensor shard pointers and SHA3-256 verification, after which the redundant .gguf file is removed to reclaim disk space."
+                    "Choose a local helper model. Converted models stay on this computer and unused copies can be removed to free disk space."
                 }
                 dl {
                     class: "kv",
@@ -276,7 +276,7 @@ pub fn LlmAndAgentManagementPanel(mut state: Signal<ShellState>) -> Element {
             // 2. Governed Environment Agent Roster & Cross-Volume Agent Invocation
             section {
                 class: "id-list",
-                h4 { "2. Governed Environment Agent Roster ({reg.agent_roster.len()} Agents · Plane 4 Instrument Sub-Agents Bound Under Your Principal DID)" }
+                h4 { "Helper agents on this computer ({reg.agent_roster.len()})" }
                 p {
                     class: "muted",
                     "Invariant: 'Natural persons are not identity assets; instruments are not peers.' Every agent is defined under your human principal DID with a deterministic session sub-agent DID (did:qualia:subagent:...), directional context policy (AddressedMessageOnly), sensitivity ceiling, MCP tool allowlist, and T59 behavioural telemetry."
@@ -438,7 +438,7 @@ pub fn LlmAndAgentManagementPanel(mut state: Signal<ShellState>) -> Element {
             // 3. External LLM Platform Accounts, Deontic Egress Rules & MCP Interfaces (TCP / Stdio / HTTP)
             section {
                 class: "id-list",
-                h4 { "3. External LLM Platform Accounts, Deontic Egress Rules & MCP Interfaces ({reg.external_accounts.len()} Accounts · TCP / Stdio / Streamable-HTTP)" }
+                h4 { "External helper accounts ({reg.external_accounts.len()})" }
                 p {
                     class: "muted",
                     "Configure external accounts (Anthropic Claude, Google Gemini, xAI Grok, OpenAI, OpenRouter, Ollama HTTP harness, or Peer Webizen Host :4245 TCP MCP). Raw API keys are stored only as opaque KeyVault references. Deontic rules enforce sensitivity ceilings (Sanctuary material is barred from external clouds), strip pairwise did:qi locators, block IP/auth-fabric reconnaissance, and route via Nym Mixnet."

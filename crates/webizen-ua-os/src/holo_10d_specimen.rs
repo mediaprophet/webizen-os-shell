@@ -50,6 +50,15 @@ pub const DEFAULT_HOLO_SPECIMENS: [&str; 4] = [
     "poet-hyperbolic-mobius-v2",
 ];
 
+/// Synth-authored workspace specimens bundled under `assets/synth/`.
+/// Kept separate from `DEFAULT_HOLO_SPECIMENS` so compact rehearsal tests stay at four.
+pub const UX_HOLO_SPECIMENS: [&str; 4] = [
+    "sanctuary-guardian-crest",
+    "wellfair-vitals-dyad",
+    "commons-solar-microgrid",
+    "holoslate-desk-totem",
+];
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum HoloShaderVisualizationMode {
     PhaseSpaceWavefield,
@@ -684,13 +693,19 @@ fn motor_translation(components: [f32; 8]) -> Result<[f32; 3], String> {
 }
 
 fn specimen_title(specimen_id: &str) -> String {
-    DEFAULT_HOLO_SPECIMENS
+    if let Some(index) = DEFAULT_HOLO_SPECIMENS
         .iter()
         .position(|&candidate| candidate == specimen_id)
-        .map_or_else(
-            || specimen_id.to_owned(),
-            |index| DEFAULT_TITLES[index].to_owned(),
-        )
+    {
+        return DEFAULT_TITLES[index].to_owned();
+    }
+    if let Some(index) = UX_HOLO_SPECIMENS
+        .iter()
+        .position(|&candidate| candidate == specimen_id)
+    {
+        return UX_TITLES[index].to_owned();
+    }
+    specimen_id.to_owned()
 }
 
 fn compact_scene_rehearsal(index: usize) -> (Vec<MultiScaleStratumLayer>, Vec<ConstituentLeafRef>) {
@@ -771,6 +786,13 @@ const DEFAULT_TITLES: [&str; 4] = [
     "Poet Hyperbolic Möbius v2",
 ];
 
+const UX_TITLES: [&str; 4] = [
+    "Sanctuary Keep Guardian Shield & Crystal Vault",
+    "WellFair Physiological Heart & Care Dyad",
+    "Community Grounds Solar Microgrid & Terrain",
+    "Holoslate Multi-Ring Spatial Command Totem",
+];
+
 fn default_specimen(index: usize) -> VerifiedHolo10dSpecimen {
     use HoloShaderVisualizationMode::*;
     let (extent, mode, wavefield_count, sigma) = [
@@ -835,7 +857,10 @@ pub fn resolve_holo_10d_specimen(
     let seed_index = (!is_path)
         .then(|| DEFAULT_HOLO_SPECIMENS.iter().position(|&name| name == slug))
         .flatten();
-    let directory = specimen_directory(storage, seed_index.is_some())?;
+    let ux_index = (!is_path)
+        .then(|| UX_HOLO_SPECIMENS.iter().position(|&name| name == slug))
+        .flatten();
+    let directory = specimen_directory(storage, seed_index.is_some() || ux_index.is_some())?;
     let file = directory.join(format!("{slug}.10d"));
     if is_path {
         if file_name != format!("{slug}.10d") {
@@ -858,6 +883,7 @@ pub fn resolve_holo_10d_specimen(
     }
     match seed_index {
         Some(index) => seed_default_specimen(&directory, index),
+        None if ux_index.is_some() => seed_ux_specimen(&directory, slug),
         None => read_specimen(slug, &file),
     }
 }
@@ -967,6 +993,102 @@ fn seed_default_specimen(
     read_specimen(id, &path)
 }
 
+fn bundled_ux_specimen_path(slug: &str) -> Option<PathBuf> {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../assets/synth")
+        .join(format!("{slug}.10d"));
+    match fs::symlink_metadata(&path) {
+        Ok(metadata) if metadata.is_file() && !is_reparse_point(&metadata) => Some(path),
+        _ => None,
+    }
+}
+
+fn ux_compact_specimen(index: usize) -> VerifiedHolo10dSpecimen {
+    use HoloShaderVisualizationMode::*;
+    let (extent, mode, wavefield_count, sigma) = [
+        ([0.72, 0.92, 0.72], PhaseSpaceWavefield, 3, 0.52),
+        ([0.58, 0.78, 0.58], AnatomicalRadialDepth, 2, 0.64),
+        ([0.96, 0.42, 0.96], ScaleSpaceHarmonicSlice, 4, 0.70),
+        ([0.68, 1.05, 0.68], HyperbolicMobiusV2, 2, 0.77),
+    ][index];
+    let id = UX_HOLO_SPECIMENS[index];
+    VerifiedHolo10dSpecimen {
+        specimen_id: id.into(),
+        title: UX_TITLES[index].into(),
+        source_path: None,
+        field_kind: FIELD_KIND_HOLO_PHASE_SPACE,
+        version: VERSION,
+        holo_segment_count: 12,
+        wavefield_count,
+        max_harmonic_order: 4,
+        max_raymarch_steps: HOLO_MAX_RAYMARCH_STEPS as u8,
+        proxy_aabb_min: extent.map(|value| -value),
+        proxy_aabb_max: extent,
+        sdf_smooth_union_radius: 0.08,
+        reference_sigma: sigma,
+        default_shader_mode: mode,
+        nquin_subject_hash: q_hash_60(id),
+        sealed_nquin_parity: 0,
+        sha3_256_hex: String::new(),
+        container_profile: COMPACT_PROFILE.to_owned(),
+        active_strata: Vec::new(),
+        constituent_leaves: Vec::new(),
+    }
+}
+
+fn seed_ux_specimen(directory: &Path, slug: &str) -> Result<VerifiedHolo10dSpecimen, String> {
+    let path = directory.join(format!("{slug}.10d"));
+    match fs::symlink_metadata(&path) {
+        Ok(_) => return read_specimen(slug, &path),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error.to_string()),
+    }
+    if let Some(bundled) = bundled_ux_specimen_path(slug) {
+        if publish_specimen_bytes(&path, slug, &fs::read(&bundled).map_err(|error| error.to_string())?)
+            .is_ok()
+        {
+            if let Ok(spec) = read_specimen(slug, &path) {
+                return Ok(spec);
+            }
+            let _ = fs::remove_file(&path);
+        }
+    }
+    let index = UX_HOLO_SPECIMENS
+        .iter()
+        .position(|&name| name == slug)
+        .ok_or_else(|| "The workspace specimen is not registered.".to_string())?;
+    publish_specimen_bytes(
+        &path,
+        slug,
+        &encode_holo_10d_container(&ux_compact_specimen(index)),
+    )?;
+    read_specimen(slug, &path)
+}
+
+fn publish_specimen_bytes(path: &Path, slug: &str, bytes: &[u8]) -> Result<(), String> {
+    static NEXT_UX_TEMP: AtomicU64 = AtomicU64::new(1);
+    let directory = path.parent().ok_or("The specimen path is missing a directory.")?;
+    let temp = directory.join(format!(
+        ".{slug}-{}-{}.tmp",
+        std::process::id(),
+        NEXT_UX_TEMP.fetch_add(1, Ordering::Relaxed)
+    ));
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temp)
+        .map_err(|error| error.to_string())?;
+    let stored = file.write_all(bytes).and_then(|()| file.sync_all());
+    drop(file);
+    let published = stored.and_then(|()| match fs::hard_link(&temp, path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => Ok(()),
+        Err(error) => Err(error),
+    });
+    let cleaned = fs::remove_file(&temp);
+    published.and(cleaned).map_err(|error| error.to_string())
+}
+
 #[cfg(windows)]
 fn is_reparse_point(metadata: &fs::Metadata) -> bool {
     use std::os::windows::fs::MetadataExt;
@@ -1035,6 +1157,30 @@ mod tests {
         let foreign = storage.join("outside.10d");
         fs::write(&foreign, encode_holo_10d_container(&default_specimen(0))).unwrap();
         assert!(resolve_holo_10d_specimen(&storage, foreign.to_str().unwrap()).is_err());
+        fs::remove_dir_all(storage).unwrap();
+    }
+
+    #[test]
+    fn resolves_bundled_or_compact_ux_workspace_specimens() {
+        let storage = std::env::temp_dir().join(format!(
+            "webizen-ux-holo-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&storage).unwrap();
+        for (index, id) in UX_HOLO_SPECIMENS.into_iter().enumerate() {
+            let specimen = resolve_holo_10d_specimen(&storage, id).unwrap();
+            assert_eq!(specimen.specimen_id, id);
+            assert_eq!(specimen.title, UX_TITLES[index]);
+            assert_eq!(specimen.field_kind, FIELD_KIND_HOLO_PHASE_SPACE);
+            let again =
+                resolve_holo_10d_specimen(&storage, &format!("qualia://specimens/{id}")).unwrap();
+            assert_eq!(again.specimen_id, id);
+            assert_eq!(again.title, UX_TITLES[index]);
+        }
         fs::remove_dir_all(storage).unwrap();
     }
 

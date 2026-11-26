@@ -36,14 +36,13 @@ pub fn InstrumentsVolume(mut state: Signal<ShellState>) -> Element {
             class: "settings-volume",
             header {
                 class: "settings-head",
-                h3 { "Instruments · LLM (.gguf -> .p64) Management, Governed Agent Roster, External MCP Accounts & 6 Core Semantic Instruments" }
+                h3 { "AI Helpers & Verification Tools" }
                 p {
-                    "Manage local .p64 AI models (converting and purging legacy .gguf files), configure per-principal Governed Software Agents callable across every OS-Shell volume, set External LLM Platform Accounts & Deontic MCP Egress Rules, and execute the 6 Core Semantic Instruments (SI-01 through SI-06) inside the 42 MiB Zero-Heap SlgArena Sentinel."
+                    "Choose which local AI models run on your graphics card, manage helper agents, and run verification checks."
                 }
             }
             LlmAndAgentManagementPanel { state }
             InstrumentReadinessOverview {}
-            QuinSlotInspector {}
             div {
                 button {
                     r#type: "button",
@@ -56,21 +55,27 @@ pub fn InstrumentsVolume(mut state: Signal<ShellState>) -> Element {
                     "Open Settings Tab 3: AI Instruments ({llm_count} vault files)"
                 }
             }
-            section {
-                class: "id-list",
-                h4 { "The 6 Core Semantic Instruments (Collectable HMC Packages · SI-01 through SI-06)" }
-                ul {
-                    for line in instruments {
-                        li { "{line}" }
+            details {
+                class: "tech-details-drawer",
+                open: true,
+                summary { "Advanced: Memory Slot & Formal Logic Inspector" }
+                QuinSlotInspector {}
+                section {
+                    class: "id-list",
+                    h4 { "Verification instruments" }
+                    ul {
+                        for line in instruments {
+                            li { "{line}" }
+                        }
                     }
                 }
-            }
-            section {
-                class: "id-list",
-                h4 { "6 Declarative SHACL Extension Bridge Families (40+ Formal Logics -> Zero-Heap WebizenOpcodes)" }
-                ul {
-                    for fam in shacl_families {
-                        li { "{fam}" }
+                section {
+                    class: "id-list",
+                    h4 { "Formal logic families" }
+                    ul {
+                        for fam in shacl_families {
+                            li { "{fam}" }
+                        }
                     }
                 }
             }

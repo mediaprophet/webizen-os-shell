@@ -139,12 +139,12 @@ fn SettingsSectionBody(section: SettingsSection, mut state: Signal<ShellState>) 
                 div {
                     header {
                         class: "settings-head",
-                        h3 { "1. Setup Health · Local Foundations & Progressive Relational Paths" }
-                        p { "Living health scorecard: local foundations first (Data home, Native Etalon GPU, 42 MiB Sentinel, Four-Plane Identifier Fabric, Local AI Instrument), then progressive relational and network paths when you connect peers." }
+                        h3 { "Setup health" }
+                        p { "A living scorecard for this computer: files, graphics, local helpers, and network paths when you connect with people you know." }
                     }
                     div {
                         class: "plane-grid",
-                        div { class: "plane-card", h5 { "Data Home [Ready]" } p { "{storage} · Unified .q42 v3/v4 + .10d v2 HOLO + VaultContainerV2" } }
+                        div { class: "plane-card", h5 { "Data Home [Ready]" } p { "{storage} · Private files, library items, and 3D models on this computer" } }
                         div { class: "plane-card", h5 { "Native Etalon GPU" } p { "{gpu} · TargetProfileMask::NATIVE_DESKTOP · 11 providers" } }
                         div { class: "plane-card", h5 { "Webizen Sentinel [Ready]" } p { "42 MiB Zero-Heap SlgArena · 917,504 48-byte NQuin48 slots" } }
                         div { class: "plane-card", h5 { "Four-Plane Fabric [Ready]" } p { "{validation}" } }
@@ -159,8 +159,8 @@ fn SettingsSectionBody(section: SettingsSection, mut state: Signal<ShellState>) 
             div {
                 header {
                     class: "settings-head",
-                    h3 { "2. Data & Memory · Native Binary, Semantic & Hypermedia Container Suite" }
-                    p { "Webizen separates private Sanctuary records, lived-memory library assets, and Permissive Commons material into cache- and page-aligned binary containers under your data home." }
+                    h3 { "Data & files" }
+                    p { "Private records, library files, and shared community material each live in their own place under your data home." }
                 }
                 dl {
                     class: "kv",
@@ -190,7 +190,7 @@ fn SettingsSectionBody(section: SettingsSection, mut state: Signal<ShellState>) 
                 div {
                     header {
                         class: "settings-head",
-                        h3 { "3. AI Instruments · .gguf -> .p64 Conversion & Purge, Governed Agent Roster & External LLM MCP Accounts" }
+                        h3 { "AI helpers" }
                         p { "Models are instruments under your control, never people. Convert discovered .gguf models into 16 KiB page-aligned .p64 v4 vaults and remove the legacy .gguf files; call models as Governed Agents across the environment; and manage External LLM Platform Accounts, Deontic Egress Rules, and MCP Interfaces." }
                     }
                     LlmAndAgentManagementPanel { state }
@@ -255,7 +255,7 @@ fn SettingsSectionBody(section: SettingsSection, mut state: Signal<ShellState>) 
             div {
                 header {
                     class: "settings-head",
-                    h3 { "4. People & Reachability · Socially Defined Networking (QDNF) & Solid Off-Ramp" }
+                    h3 { "People & network" }
                     p { "Separates the Who-Plane (NaturalAgent) from the Handle-Plane (DNI / DNS / IP), with post-quantum hybrid transport and W3C Solid Pod portability." }
                 }
                 section {
@@ -276,7 +276,7 @@ fn SettingsSectionBody(section: SettingsSection, mut state: Signal<ShellState>) 
             div {
                 header {
                     class: "settings-head",
-                    h3 { "5. Privacy & Sanctuary · Dual-Lane VaultContainerV2 & Anti-Coercion Safeguards" }
+                    h3 { "Privacy & sanctuary" }
                     p { "Constant-shape 4-layer CBOR vault (sanctuary_vault.cbor: Real, Decoy, and Reserved slots) with Argon2id (64 MiB, 3 passes) + AES-256-GCM, one-way key hierarchy (Real -> Decoy), and tamper-evident Sanctuary Audit DAG." }
                 }
                 dl {
@@ -480,7 +480,7 @@ fn SettingsSectionBody(section: SettingsSection, mut state: Signal<ShellState>) 
             div {
                 header {
                     class: "settings-head",
-                    h3 { "7. Person & Devices · Four-Plane Identifier Fabric (Jury-Safe Enumeration)" }
+                    h3 { "This computer" }
                     p { "Identifiers are never human identity. Living beings, claims, spacetime/route coordinates, and cryptographic instruments remain strictly unmerged across all four planes." }
                 }
                 ApplianceProfilesPanel { state }
@@ -522,7 +522,7 @@ fn SettingsSectionBody(section: SettingsSection, mut state: Signal<ShellState>) 
             div {
                 header {
                     class: "settings-head",
-                    h3 { "8. Backup & Recovery · Shamir .q42j Journals, .qnf Evidence & Solid Portability" }
+                    h3 { "Backup & recovery" }
                     p { "Recover encrypted public metadata and export eligible Library records as local Turtle files." }
                 }
                 section {
@@ -543,7 +543,7 @@ fn SettingsSectionBody(section: SettingsSection, mut state: Signal<ShellState>) 
             div {
                 header {
                     class: "settings-head",
-                    h3 { "9. Services & Updates · Qap Registry, Ed25519 Updater & Dual-SKU Delivery" }
+                    h3 { "Services & updates" }
                     p { "Manages the local QualiaDB sidecar, atomic Qap installation, Synth-style Ed25519 self-updates (C7), and Dual-SKU packaging (SKU A Guest Installer + SKU B Debian 13 Trixie Overlay)." }
                 }
                 dl {
@@ -624,7 +624,7 @@ fn SettingsSectionBody(section: SettingsSection, mut state: Signal<ShellState>) 
             div {
                 header {
                     class: "settings-head",
-                    h3 { "10. All Technical Settings · Native Etalon Adapters & VibeScript ABI" }
+                    h3 { "Technical details" }
                     p { "Low-level physical GPU adapter diagnostics, Anvil NodeProfile64 specialization hints, and 11 native vibescript-abi extension providers." }
                 }
                 RendererHealthPanel { state }

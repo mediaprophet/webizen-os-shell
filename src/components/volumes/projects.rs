@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Timothy Charles Holborn.
 // SPDX-License-Identifier: CC-BY-NC-ND-4.0
 
+use crate::components::viewports::Holo10dViewport;
 use crate::state::{contribution_lens, session, ShellState, WebizenRefractModel};
 use aether::prelude::*;
 use aether::refract::{ContributionStage, ContributionStageView};
@@ -8,9 +9,24 @@ use webizen_ua_os::{
     validate_human_centric_host_nomenclature, HostedProjectOwnershipStage,
 };
 
+const PROJECT_MILESTONES: [(&str, &str); 9] = [
+    ("1. Agree the work", "Everyone agrees what will be done, who is involved, and how fair pay is discussed before work starts."),
+    ("2. Log time and materials", "People record hours and materials as they happen, without creating a debt just by logging effort."),
+    ("3. Review", "The group reviews the work and supporting notes together."),
+    ("4. Accept", "Stewards accept the reviewed work so it can move into a bounded obligation."),
+    ("5. Bound the obligation", "The group names a clear, limited obligation instead of an open-ended debt."),
+    ("6. Draw from pre-funded credit", "Payment is drawn only from credit that was already set aside for this work."),
+    ("7. Reconcile", "Unused credit is carried, returned, or reserved for another agreed person."),
+    ("8. Settle", "The agreed value is settled through the community credit loops."),
+    ("9. Close and licence", "The work is closed and any licence decision is recorded with the contributors."),
+];
+
 #[component]
 pub fn ProjectsVolume(state: Signal<ShellState>) -> Element {
     let vault = state.read().storage_display.clone();
+    let mut active_step = use_signal(|| 0usize);
+    let step = active_step();
+    let (step_title, step_copy) = PROJECT_MILESTONES[step.min(8)];
     rsx! {
         div {
             class: "settings-volume",
@@ -21,26 +37,49 @@ pub fn ProjectsVolume(state: Signal<ShellState>) -> Element {
             }
             ol {
                 class: "project-milestones",
-                li { class: "live", "1. Agree the work" }
-                li { "2. Log time and materials" }
-                li { "3. Review" }
-                li { "4. Accept" }
-                li { "5. Bound the obligation" }
-                li { "6. Draw from pre-funded credit" }
-                li { "7. Reconcile" }
-                li { "8. Settle" }
-                li { "9. Close and licence" }
+                for (index, (title, _)) in PROJECT_MILESTONES.iter().enumerate() {
+                    {
+                        let is_live = index == step;
+                        rsx! {
+                            li {
+                                key: "{index}",
+                                class: if is_live { "live" } else { "" },
+                                button {
+                                    r#type: "button",
+                                    class: if is_live { "ribbon-btn active" } else { "ribbon-btn" },
+                                    onclick: move |_| active_step.set(index),
+                                    "{title}"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            article {
+                class: "vault-status-card",
+                h5 { "{step_title}" }
+                p { "{step_copy}" }
+            }
+            Holo10dViewport {
+                state,
+                specimen_label: "Community Grounds solar microgrid".to_string(),
+                specimen_id: "commons-solar-microgrid".to_string(),
             }
             CooperativeProjectArchetypesPanel { state }
-            section {
-                class: "id-list",
-                h4 { "Nine-Stage Contribution, Valuation, Obligation & Licence-Transition Pipeline" }
-                ul {
-                    li { "Stage 1: Request & Agreement (Commissioned, OpenBounty, CooperativeMandate, StewardAuthorised; ContractedService, ConditionalPoolShare, VoluntaryCommonsGift)" }
-                    li { "Stage 2: Activity & Resources (effort minutes, reimbursable expenses, and capital advanced logged without prematurely minting debt)" }
-                    li { "Stages 3-5: Contextual Assertion Review, Steward Acceptance (M-of-N Ed25519 + ML-DSA-65 quorum), and Bounded Obligation Derivation" }
-                    li { "Stages 6-8: Pre-Funded Credit Allocation Drawdown (no automatic overdraft), Periodic Reconciliation, and Two-Loop Permissive Commons Settlement" }
-                    li { "Stage 9: Verified Obligation Discharge & Authorised Licence-Transition Decision (evaluated by licence-transition-readiness Semantic Instrument)" }
+            details {
+                class: "tech-details-drawer",
+                open: true,
+                summary { "Contribution pipeline details" }
+                section {
+                    class: "id-list",
+                    h4 { "Nine-stage contribution, valuation, obligation & licence pipeline" }
+                    ul {
+                        li { "Stage 1: Request & Agreement (Commissioned, OpenBounty, CooperativeMandate, StewardAuthorised; ContractedService, ConditionalPoolShare, VoluntaryCommonsGift)" }
+                        li { "Stage 2: Activity & Resources (effort minutes, reimbursable expenses, and capital advanced logged without prematurely minting debt)" }
+                        li { "Stages 3-5: Contextual Assertion Review, Steward Acceptance (M-of-N Ed25519 + ML-DSA-65 quorum), and Bounded Obligation Derivation" }
+                        li { "Stages 6-8: Pre-Funded Credit Allocation Drawdown (no automatic overdraft), Periodic Reconciliation, and Two-Loop Permissive Commons Settlement" }
+                        li { "Stage 9: Verified Obligation Discharge & Authorised Licence-Transition Decision (evaluated by licence-transition-readiness Semantic Instrument)" }
+                    }
                 }
             }
             ProjectObligationLedger {}

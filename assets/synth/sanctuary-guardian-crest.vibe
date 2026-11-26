@@ -1,0 +1,29 @@
+requires [capability("capability.invoke")];
+// Sanctuary Keep guardian shield & crystal vault emblem.
+// Revolved closed solid: vaulted base, crystal waist, pointed crest.
+let crest = capability.invoke("hypermedia.manifold.revolve", {
+  points: [
+    [0.45, 0.0],
+    [7.2, 1.1],
+    [8.4, 3.2],
+    [4.1, 5.4],
+    [4.6, 8.0],
+    [9.4, 10.4],
+    [7.6, 14.2],
+    [3.2, 18.6],
+    [0.42, 22.0]
+  ],
+  segments: 48,
+  caps: true
+});
+let ten_d = capability.invoke("hypermedia.manifold.compile_10d_pbr", {
+  mesh: crest,
+  topology: true,
+  spatial_index: true,
+  camera_position: [22.0, 14.0, 26.0],
+  camera_target: [0.0, 10.0, 0.0],
+  camera_up: [0.0, 1.0, 0.0],
+  camera_fov: 38.0,
+  camera_near: 0.1
+});
+let asset = { files: [{ key: "sanctuary-guardian-crest.10d", resource: ten_d }] };

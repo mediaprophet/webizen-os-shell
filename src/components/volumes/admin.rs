@@ -30,6 +30,11 @@ pub fn AdminVolume(state: Signal<ShellState>) -> Element {
     rsx! {
         div {
             class: "settings-volume",
+            header {
+                class: "settings-head",
+                h3 { "Admin" }
+                p { "Home server, device fleet, and system updates. Technical packaging controls stay available below." }
+            }
             div {
                 class: "volume-subtabs",
                 role: "tablist",

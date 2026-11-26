@@ -105,9 +105,45 @@ pub fn BrowserVolume(mut state: Signal<ShellState>) -> Element {
         BrowserExecutionMode::HybridAugmented => "Hybrid",
     };
 
+    const QUICK_TABS: [(&str, &str); 4] = [
+        ("Community Grounds", "https://dev.civics.au/site-planner"),
+        ("3D Biosphere Universe", "qualia://chora/universe"),
+        (
+            "3D Solar Microgrid (.10d)",
+            "qualia://specimens/commons-solar-microgrid.10d",
+        ),
+        ("Human Rights Observatory", "https://observatory.civics.au"),
+    ];
+    let committed = committed_address.clone();
+
     rsx! {
         div {
             class: "browser-workspace",
+            nav {
+                class: "browser-tabs-bar",
+                aria_label: "Open tabs",
+                for (label, dest) in QUICK_TABS {
+                    {
+                        let is_active = committed == dest || url == dest;
+                        rsx! {
+                            button {
+                                key: "{dest}",
+                                r#type: "button",
+                                class: if is_active { "browser-tab active" } else { "browser-tab" },
+                                aria_current: if is_active { "true" } else { "false" },
+                                onclick: move |_| {
+                                    let mut s = state.write();
+                                    let resolved = resolve_mode_for_uri(dest, s.browser_mode);
+                                    s.browser_url = dest.to_string();
+                                    s.browser_mode = resolved;
+                                    address_draft.set(dest.to_string());
+                                },
+                                "{label}"
+                            }
+                        }
+                    }
+                }
+            }
             nav {
                 class: "browser-toolbar",
                 aria_label: "Browser",
@@ -307,6 +343,7 @@ pub fn BrowserVolume(mut state: Signal<ShellState>) -> Element {
 
             details {
                 class: "tech-details-drawer",
+                open: true,
                 summary { "Bookmarks, groups, and page notes" }
                 p { class: "muted", "Active mode: {mode_title} · {mode_engine}" }
                 dl {

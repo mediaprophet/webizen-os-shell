@@ -219,24 +219,69 @@ pub fn LibraryVolume(mut state: Signal<ShellState>) -> Element {
                     "Showing {match_count} of {total_entries} items"
                 }
 
-                Holo10dViewport {
-                    state,
-                    specimen_label: viewport_label,
-                    specimen_id: viewport_specimen_id,
-                }
-                LibraryPortabilityPanel { state, selected: portability_entry }
-
-                button {
-                    r#type: "button",
-                    aria_expanded: if guide_open() { "true" } else { "false" },
-                    onclick: move |_| {
-                        let opening = !guide_open();
-                        guide_loaded.set(None);
-                        guide_open.set(opening);
-                    },
-                    if guide_open() { "Hide Library reference sheet" }
-                    else { "Show Library reference sheet" }
-                }
+                div {
+                    class: "library-split-workspace",
+                    section {
+                        class: "id-list",
+                        h4 { "Your files, books & 3D models" }
+                        div {
+                            class: "plane-grid",
+                            for item in matched.iter() {
+                                {
+                                    let uri = item.asset_uri.clone();
+                                    let title = item.title.clone();
+                                    let media = item.media_type.clone();
+                                    let badge = if is_holo(&item.asset_uri, &item.media_type) {
+                                        "3D Holographic Model (.10d)"
+                                    } else if media.contains("pdf") {
+                                        "Verified Credential PDF"
+                                    } else if media.contains("text") || media.contains("markdown") {
+                                        "Document"
+                                    } else {
+                                        "Library item"
+                                    };
+                                    let topics = item.topics.join(" · ");
+                                    rsx! {
+                                        div {
+                                            key: "{uri}",
+                                            class: "plane-card",
+                                            h5 { "{title}" }
+                                            p { class: "muted", "{badge}" }
+                                            if !topics.is_empty() {
+                                                p { "{topics}" }
+                                            }
+                                            button {
+                                                r#type: "button",
+                                                class: "sanctum-issue",
+                                                onclick: move |_| {
+                                                    state.write().selected_library_uri = uri.clone();
+                                                },
+                                                "Inspect Container Graph & Lineage"
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    div {
+                        Holo10dViewport {
+                            state,
+                            specimen_label: viewport_label,
+                            specimen_id: viewport_specimen_id,
+                        }
+                        LibraryPortabilityPanel { state, selected: portability_entry }
+                        button {
+                            r#type: "button",
+                            aria_expanded: if guide_open() { "true" } else { "false" },
+                            onclick: move |_| {
+                                let opening = !guide_open();
+                                guide_loaded.set(None);
+                                guide_open.set(opening);
+                            },
+                            if guide_open() { "Hide Library reference sheet" }
+                            else { "Show Library reference sheet" }
+                        }
                 if guide_open() {
                     img {
                         src: "aether://app/assets/library-sheet.png",
@@ -251,7 +296,13 @@ pub fn LibraryVolume(mut state: Signal<ShellState>) -> Element {
                         Some(true) => rsx! {},
                     }
                 }
+                    }
+                }
 
+                details {
+                    class: "tech-details-drawer",
+                    open: true,
+                    summary { "Opt-in specialist tools & graph details" }
                 // Opt-In Semantic ToolChest (Poet Shed Pattern)
                 section {
                     class: "id-list",
@@ -403,51 +454,6 @@ pub fn LibraryVolume(mut state: Signal<ShellState>) -> Element {
                                             }
                                         },
                                         "project:{proj_label}"
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Matched Semantic Containers Grid
-                section {
-                    class: "id-list",
-                    h4 { "Matched Semantic Containers ({match_count})" }
-                    div {
-                        class: "plane-grid",
-                        for item in matched.iter() {
-                            {
-                                let uri = item.asset_uri.clone();
-                                let title = item.title.clone();
-                                let media = item.media_type.clone();
-                                let sec = item.section.clone();
-                                let sens = item.sensitivity.clone();
-                                let depicts_str = item.depicts.join(", ");
-                                let quins_n = item.sealed_nquin_count;
-                                let place_str = item.place.clone().unwrap_or_else(|| "Device-local locus".into());
-                                rsx! {
-                                    div {
-                                        key: "{uri}",
-                                        class: "plane-card",
-                                        h5 { "{title}" }
-                                        p {
-                                            "Section: {sec} ({sens}) · Media: {media} · {quins_n} NQuin48 edges"
-                                        }
-                                        p {
-                                            "Depicts / Contains: {depicts_str}"
-                                        }
-                                        p {
-                                            "Locus: {place_str}"
-                                        }
-                                        button {
-                                            r#type: "button",
-                                            class: "sanctum-issue",
-                                            onclick: move |_| {
-                                                state.write().selected_library_uri = uri.clone();
-                                            },
-                                            "Inspect Container Graph & Lineage"
-                                        }
                                     }
                                 }
                             }
@@ -655,6 +661,7 @@ pub fn LibraryVolume(mut state: Signal<ShellState>) -> Element {
                     if !clipboard_toast.is_empty() {
                         p { class: "muted", role: "status", "{clipboard_toast}" }
                     }
+                }
                 }
             }
         }

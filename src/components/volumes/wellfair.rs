@@ -2,9 +2,12 @@
 // SPDX-License-Identifier: CC-BY-NC-ND-4.0
 
 use crate::{
-    components::auxiliary_windows::{AuxWindowBridge, CareResponseAuthority},
+    components::{
+        auxiliary_windows::{AuxWindowBridge, CareResponseAuthority},
+        viewports::Holo10dViewport,
+    },
     state::{
-        refresh_refract_host_records, session, wellfair_review_lens, ShellState,
+        refresh_refract_host_records, session, wellfair_review_lens, ShellState, VolumeStage,
         WebizenRefractModel,
     },
 };
@@ -28,12 +31,49 @@ enum WellfairSubTab {
 }
 
 #[component]
-pub fn WellfairVolume(state: Signal<ShellState>) -> Element {
+pub fn WellfairVolume(mut state: Signal<ShellState>) -> Element {
     let mut active_tab = use_signal(|| WellfairSubTab::CaseworkAndPortal);
     let tab = active_tab();
+    let mut checkin_ok = use_signal(|| false);
+    let bridge = try_consume_context::<AuxWindowBridge>();
     rsx! {
         div {
             class: "settings-volume",
+            section {
+                class: "wellbeing-hero",
+                h3 { "Daily Wellbeing & Care Check-In" }
+                p { "A calm place for health notes, your care circle, and family check-ins. You stay in control of every record." }
+                div {
+                    class: "orb-sectors",
+                    button {
+                        r#type: "button",
+                        class: if checkin_ok() { "sanctum-issue" } else { "ribbon-btn" },
+                        onclick: move |_| checkin_ok.set(true),
+                        "✓ I am OK"
+                    }
+                    if let Some(bridge) = bridge.clone() {
+                        button {
+                            r#type: "button",
+                            class: "ribbon-btn",
+                            onclick: move |_| bridge.open_urgent_care_alert_modal(),
+                            "Open Urgent Care Alerts Window"
+                        }
+                    }
+                    button {
+                        r#type: "button",
+                        class: "ribbon-btn",
+                        onclick: move |_| {
+                            state.write().current_stage = VolumeStage::Anatomy;
+                        },
+                        "Open 3D Body Atlas"
+                    }
+                }
+                Holo10dViewport {
+                    state,
+                    specimen_label: "Care dyad & vitals".to_string(),
+                    specimen_id: "wellfair-vitals-dyad".to_string(),
+                }
+            }
             div {
                 class: "volume-subtabs",
                 role: "tablist",
@@ -42,19 +82,19 @@ pub fn WellfairVolume(state: Signal<ShellState>) -> Element {
                     r#type: "button",
                     class: if tab == WellfairSubTab::CaseworkAndPortal { "ribbon-btn active" } else { "ribbon-btn" },
                     onclick: move |_| active_tab.set(WellfairSubTab::CaseworkAndPortal),
-                    "1. Casework, Instruments & Specialist Portal"
+                    "1. Health Team, Visits & Advocacy"
                 }
                 button {
                     r#type: "button",
                     class: if tab == WellfairSubTab::GuardianshipAndCare { "ribbon-btn active" } else { "ribbon-btn" },
                     onclick: move |_| active_tab.set(WellfairSubTab::GuardianshipAndCare),
-                    "2. Shared Living, Guardianship & Remote Carer Alerts"
+                    "2. Family, Shared Living & Check-In Alerts"
                 }
                 button {
                     r#type: "button",
                     class: if tab == WellfairSubTab::FairnessReview { "ribbon-btn active" } else { "ribbon-btn" },
                     onclick: move |_| active_tab.set(WellfairSubTab::FairnessReview),
-                    "3. Six-Dimension Fairness & Rights Review"
+                    "3. Fairness & Rights Check"
                 }
             }
             match tab {
@@ -225,9 +265,9 @@ pub fn GuardianshipAndCarePanel(mut state: Signal<ShellState>) -> Element {
             class: "settings-volume",
             header {
                 class: "settings-head",
-                h3 { "WellFair · Shared Systems, Relational Guardianship (UN CRC / CRPD) & Remote Carer Alerts" }
+                h3 { "Family, shared living & check-in alerts" }
                 p {
-                    "Qualia wellfare-core fiduciary vault where the natural person is the principal: models Share-Houses (equal adult peers with isolated Sanctuary vaults and zero peer guardianship), Families with Children (AgencyStage gradient, own DigitalBirthRecord, split StewardRoles, flagged-ingest GuardianNotifications), and Elderly / Supported Persons with Remote Family Members or Carers elsewhere (scoped QDNF heartbeat/medication/fall alerts with reversible 'I am OK' check-in and DutyOfInquiry accountability)."
+                    "Coordinate health notes, shared household care, and remote family check-ins while keeping every person in control of their own records."
                 }
             }
 
@@ -544,7 +584,7 @@ pub fn GuardianshipAndCarePanel(mut state: Signal<ShellState>) -> Element {
                 ul {
                     li { "48-Byte NQuin Epistemic Envelopes: EpistemicStatus, EvidenceType, SensitivityClass with volatile RAM scrubbing on drop" }
                     li { "3D Human Anatomy & Maternal-Fetal Dyad: 17-system atlas (human-welfare.hmc), Progenitor vs gestational mother autonomy, DigitalBirthRecord" }
-                    li { "Relational Guardianship (UN CRC / CRPD): AgencyStage gradient, bilateral M-of-N GuardianshipProposal escrow, protective co-guardian veto" }
+                    li { "Family and guardian roles follow UN CRC / CRPD: each person keeps their own records, with protective co-guardian review when needed" }
                     li { "Contested & Personal Safety Records: Disputed-diagnosis reports, housing-safety reports, WelfareStream & GovernmentLetter index" }
                     li { "Duty of Inquiry & Six Vectors of Transparency (Who/When/Why/What/Where/Cost): Distinguishes NoFault, Diligent, UncheckedNoHarm, and Negligent" }
                 }

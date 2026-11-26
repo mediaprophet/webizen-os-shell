@@ -1,0 +1,41 @@
+requires [capability("capability.invoke")];
+let layout = {
+  viewport_width: 1024,
+  viewport_height: 640,
+  boxes: [
+    {id:"halo",role:"sidebar",label:"LIBRARY\nFiles · Books · 3D\n\nAll items\nDocuments\nMedia\n3D models\nCredentials\nShared work",x:0,y:0,width:146,height:600,state:"active"},
+    {id:"header",role:"header",label:"LIBRARY  ·  YOUR FILES, BOOKS AND 3D MODELS  ·  LIVE PREVIEW ON THE RIGHT",x:156,y:8,width:858,height:36,state:"active"},
+    {id:"c1",role:"card",label:"Community Grounds Solar Twin\n\n3D holographic model (.10d)\nOpen in Poet Studio or Browser\nShared with the grounds crew",x:156,y:54,width:280,height:150,state:"focus"},
+    {id:"c2",role:"card",label:"Family Recovery Guide\n\nDocument\nPrivate notes and checklists\nOpen in the reader",x:448,y:54,width:280,height:150,state:"default"},
+    {id:"c3",role:"card",label:"Care Circle Letter\n\nVerified credential PDF\nSigned by your GP\nShare or export when you choose",x:740,y:54,width:274,height:150,state:"default"},
+    {id:"preview",role:"panel",label:"LIVE 3D PREVIEW\n\nSelected: Community Grounds Solar Twin\nRotate, inspect, then open in Poet Studio\nGuardian crest, vitals dyad, and desk totem live here too",x:156,y:216,width:420,height:200,state:"hover"},
+    {id:"actions",role:"panel",label:"QUICK ACTIONS\n\nOpen in Poet Studio\nOpen in Browser\nShare or Export\nShow this reference sheet",x:594,y:216,width:420,height:200,state:"default"},
+    {id:"footer",role:"panel",label:"Specialist extractors and graph details stay in a quiet drawer under your files. Everyday browsing never starts with engine jargon.",x:156,y:428,width:858,height:160,state:"active"},
+    {id:"status",role:"footer",label:"Library · human-first workspace  ·  3D preview on the right  ·  Native Etalon GPU",x:0,y:600,width:1024,height:40,state:"default"}
+  ]
+};
+let theme = capability.invoke("hypermedia.layout.bind_theme_scope", {
+  scope: "environment",
+  mode: "holosonic-dark",
+  accent: [77, 184, 255, 255],
+  corner_radius: 16.0
+});
+let ui = capability.invoke("hypermedia.layout.render_ui_sheet", {
+  layout: layout,
+  theme: theme,
+  font: "ui-font.ttf",
+  scale: 1.0
+});
+let png = capability.invoke("hypermedia.radiance.encode_rgba_png", { image: ui });
+let svg = capability.invoke("hypermedia.layout.project_ui_svg", {
+  layout: layout,
+  theme: theme,
+  font: "ui-font.ttf",
+  scale: 1.0
+});
+let asset = {
+  files: [
+    { key: "library-sheet.png", resource: png },
+    { key: "library-sheet.svg", resource: svg }
+  ]
+};

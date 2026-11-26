@@ -32,6 +32,7 @@ use webizen_ua_os::{
     resolve_holo_10d_specimen, resolve_mode_for_uri, BrowserExecutionMode,
     HoloShaderVisualizationMode, HybridWebCapabilityChannel, SemanticSceneGraph,
     SpatialManifoldTopology, VerifiedHolo10dSpecimen, DEFAULT_HOLO_SPECIMENS, HOLO_MAX_RAYMARCH_STEPS,
+    UX_HOLO_SPECIMENS,
 };
 
 use crate::components::spatial_stage_3d::pick_semantic_id as pick_graph_semantic_id;
@@ -1350,17 +1351,24 @@ fn AllowedHolo10dViewport(
                         value: "{active_specimen_id}",
                         onchange: move |event| {
                             let selected = event.value();
-                            if !DEFAULT_HOLO_SPECIMENS.contains(&selected.as_str()) {
+                            if !DEFAULT_HOLO_SPECIMENS.contains(&selected.as_str())
+                                && !UX_HOLO_SPECIMENS.contains(&selected.as_str())
+                            {
                                 return;
                             }
                             let mut shell = state.write();
                             shell.active_holo_specimen_id = selected;
                             shell.holo_shader_mode = None;
                         },
-                        if !DEFAULT_HOLO_SPECIMENS.contains(&active_specimen_id.as_str()) {
+                        if !DEFAULT_HOLO_SPECIMENS.contains(&active_specimen_id.as_str())
+                            && !UX_HOLO_SPECIMENS.contains(&active_specimen_id.as_str())
+                        {
                             option { value: "{active_specimen_id}", "{active_specimen_id}" }
                         }
                         for id in DEFAULT_HOLO_SPECIMENS {
+                            option { key: "{id}", value: "{id}", "{id}" }
+                        }
+                        for id in UX_HOLO_SPECIMENS {
                             option { key: "{id}", value: "{id}", "{id}" }
                         }
                     }

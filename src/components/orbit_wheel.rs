@@ -15,79 +15,82 @@ use webizen_ua_os::{
 };
 
 const APPS: &[(&str, VolumeStage, &str, &str)] = &[
-    ("Talk", VolumeStage::Talk, "💬", "Human <-> human · QDNF"),
-    ("Mail", VolumeStage::Mail, "✉", "Pairwise locator + inbox"),
+    ("Talk", VolumeStage::Talk, "💬", "Messages & voice with people you know"),
+    ("Mail", VolumeStage::Mail, "✉", "Private letters & relationship inboxes"),
     (
         "Directory",
         VolumeStage::Directory,
         "👥",
-        "NaturalAgent social book",
+        "People, family & cooperative contacts",
     ),
-    ("Browser", VolumeStage::Browser, "🌐", "Chora + WWW worker"),
+    ("Browser", VolumeStage::Browser, "🌐", "Websites & 3D spatial pages"),
     (
         "Keep · Sanctuary",
         VolumeStage::Keep,
         "🛡",
-        "4-slot VaultContainerV2",
+        "Private vault, passwords & family recovery",
     ),
     (
         "Library",
         VolumeStage::Library,
         "📚",
-        ".q42 / .10d / .hmc / QECP",
+        "Books, documents, media & 3D models",
     ),
     (
         "Instruments",
         VolumeStage::Instruments,
         "🎛",
-        "6 Core SI + 40 Logics",
+        "Local AI helpers & verification tools",
     ),
     (
         "Poet & Synth",
         VolumeStage::Poet,
         "🪶",
-        "VibeScript + 150 morphisms",
+        "Documents, spreadsheets & 3D Synth studio",
     ),
     (
         "WellFair",
         VolumeStage::Wellfair,
         "💚",
-        "Health, dyad & guardianship",
+        "Health journal, care circle & check-ins",
     ),
     (
         "Anatomy (Qap)",
         VolumeStage::Anatomy,
         "🫀",
-        "10D v2 HOLO medical atlas",
+        "Interactive 3D human body atlas",
     ),
-    ("Wallet", VolumeStage::Wallet, "⚡", "Lightning · Nym · XEC"),
+    ("Wallet", VolumeStage::Wallet, "⚡", "Balances, payments & shared project credits"),
     (
         "Projects",
         VolumeStage::Projects,
         "📋",
-        "9-Stage Contribution Ledger",
+        "Shared work, milestones & contributor fair pay",
     ),
     (
         "Settings",
         VolumeStage::Settings,
         "⚙",
-        "10 tabs · Four-Plane Fabric",
+        "Appearance, accessibility, privacy & devices",
     ),
     (
         "Admin",
         VolumeStage::Admin,
         "🔧",
-        "Sidecar · Jobs · Dual-SKU",
+        "Home server, device fleet & system updates",
     ),
 ];
 
 #[component]
 pub fn OrbitWheel(mut state: Signal<ShellState>) -> Element {
     let qap_count = state.read().installed_qaps.len();
-    let sub_text = format!(
-        "First-class volumes + {} verified Qap packages in storage/Qapps/registry.json · Live vs Planned honesty only.",
-        qap_count
-    );
+    let sub_text = if qap_count == 0 {
+        "Search your workspaces, open a web or 3D spatial address, or ask a local helper.".to_string()
+    } else {
+        format!(
+            "Search your workspaces, open a web or 3D spatial address, or ask a local helper. {qap_count} installed apps are ready."
+        )
+    };
     rsx! {
         div {
             id: "launcher",
@@ -99,7 +102,7 @@ pub fn OrbitWheel(mut state: Signal<ShellState>) -> Element {
             div {
                 id: "launcher-panel",
                 onclick: move |evt| evt.stop_propagation(),
-                h2 { id: "launcher-title", "Constellation · Foundational Volumes & Qaps" }
+                h2 { id: "launcher-title", "Open an App or Run a Command" }
                 p {
                     class: "sub",
                     "{sub_text}"

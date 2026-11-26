@@ -92,16 +92,16 @@ pub const ALL_SETTINGS_SECTIONS: [SettingsSection; 10] = [
 impl SettingsSection {
     pub const fn label(self) -> &'static str {
         match self {
-            Self::Health => "1. Setup health",
-            Self::Data => "2. Data & memory",
-            Self::Models => "3. AI instruments",
-            Self::People => "4. People & reachability",
-            Self::Privacy => "5. Privacy & sanctuary",
-            Self::Appearance => "6. Appearance & access",
-            Self::Device => "7. Person & devices",
-            Self::Backup => "8. Backup & recovery",
-            Self::Services => "9. Services & updates",
-            Self::Technical => "10. All technical settings",
+            Self::Health => "Setup health",
+            Self::Data => "Data & files",
+            Self::Models => "AI helpers",
+            Self::People => "People & network",
+            Self::Privacy => "Privacy & sanctuary",
+            Self::Appearance => "Appearance & access",
+            Self::Device => "This computer",
+            Self::Backup => "Backup & recovery",
+            Self::Services => "Services & updates",
+            Self::Technical => "Technical details",
         }
     }
 
@@ -449,9 +449,12 @@ pub struct ShellState {
     pub talk_messages: Vec<String>,
     pub talk_input: String,
     pub talk_agent_tool_active: bool,
+    pub talk_active_contact: String,
     pub mail_messages: Vec<String>,
     pub mail_to_locator: String,
     pub mail_subject: String,
+    pub mail_body: String,
+    pub mail_selected: usize,
     pub directory_contacts: Vec<String>,
     pub directory_new_name: String,
     pub browser_url: String,
@@ -620,9 +623,12 @@ impl ShellState {
             talk_messages: Vec::new(),
             talk_input: String::new(),
             talk_agent_tool_active: false,
+            talk_active_contact: String::new(),
             mail_messages: Vec::new(),
             mail_to_locator: String::new(),
             mail_subject: String::new(),
+            mail_body: String::new(),
+            mail_selected: 0,
             directory_contacts: Vec::new(),
             directory_new_name: String::new(),
             browser_url: "qualia://chora/universe".into(),
@@ -853,21 +859,27 @@ impl ShellState {
             updater_status: String::new(),
             delivery_status: String::new(),
             talk_messages: vec![
-                "[NaturalAgent · Pairwise QDNF Channel] Ready for human-to-human messaging.".into(),
-                "[Continuity Rule] Handle != human. Governed AI assistant sits on the Tool plane — never impersonates a peer.".into(),
+                "Elena: The Community Grounds solar drawings are ready for review.".into(),
+                "You: I'll open them in Poet Studio and walk the 3D model this afternoon.".into(),
+                "Jordan: Wellness check-in is confirmed for Thursday morning.".into(),
             ],
             talk_input: String::new(),
             talk_agent_tool_active: false,
+            talk_active_contact: "Elena Vance".into(),
             mail_messages: vec![
-                "Inbox [Pairwise Locator did:qi:mail:a->b] · Welcome to relationship-scoped mail (domain expiry never erases who).".into(),
-                "Commons Notice [did:qi:mail:commons->steward] · 9-Stage Contribution Ledger & QECP PDF verification ready.".into(),
+                "Elena Vance · Solar drawings ready · Please review the catchment layout before Friday.".into(),
+                "Jordan Hale · Care circle note · Wellness check-in confirmed for this week.".into(),
+                "Maya Chen · Community Grounds crew · Battery bank install is scheduled for Saturday.".into(),
             ],
-            mail_to_locator: "did:qi:locator:peer-steward".into(),
-            mail_subject: "Cooperative project milestone & QECP receipt".into(),
+            mail_to_locator: "Elena Vance".into(),
+            mail_subject: "Solar drawings ready".into(),
+            mail_body: String::new(),
+            mail_selected: 0,
             directory_contacts: vec![
-                "NaturalAgent (living-SHACL) · Local Principal Steward · Pairwise DID bound".into(),
-                "NaturalAgent (living-SHACL) · Cooperative Co-Steward · Bilateral Guardianship & Commons Peer".into(),
-                "Organisational Peer (Separate Who-Kind) · Community Grounds Databox (dev.civics.au)".into(),
+                "Elena Vance · Co-op Architect · Person & Peer".into(),
+                "Jordan Hale · Family GP · Care Circle".into(),
+                "Maya Chen · Community Steward · Co-op Member".into(),
+                "Nest · Community Grounds Node · Community".into(),
             ],
             directory_new_name: String::new(),
             browser_url: "qualia://chora/universe".into(),
@@ -1140,7 +1152,37 @@ impl ShellState {
         }
         Ok(())
     }
+
+    pub fn cycle_look_theme(&mut self) {
+        let current = self.theme_registry.active_id.as_str();
+        let index = LOOK_THEME_CYCLE
+            .iter()
+            .position(|&id| id == current)
+            .unwrap_or(0);
+        let next = LOOK_THEME_CYCLE[(index + 1) % LOOK_THEME_CYCLE.len()];
+        let _ = self.adopt_theme(next);
+    }
+
+    pub fn look_short_name(&self) -> &'static str {
+        match self.theme_registry.active_id.as_str() {
+            "theme-obsidian" => "Obsidian",
+            "theme-commons" => "Commons",
+            "theme-holoslate" => "Holoslate",
+            "theme-cyber-grid" => "Cyber-Grid",
+            "theme-spatial-commons" => "Spatial Commons",
+            _ => "Holosonic",
+        }
+    }
 }
+
+const LOOK_THEME_CYCLE: [&str; 6] = [
+    "theme-holosonic",
+    "theme-obsidian",
+    "theme-commons",
+    "theme-holoslate",
+    "theme-cyber-grid",
+    "theme-spatial-commons",
+];
 
 fn css_class_for_theme(id: &str) -> &'static str {
     match id {
@@ -1188,16 +1230,16 @@ impl VolumeStage {
             VolumeStage::Mail => "Mail",
             VolumeStage::Directory => "Directory",
             VolumeStage::Browser => "Browser",
-            VolumeStage::Keep => "Keep · Sanctuary Vault",
+            VolumeStage::Keep => "Keep",
             VolumeStage::Library => "Library",
-            VolumeStage::Instruments => "Instruments",
-            VolumeStage::Poet => "Poet & Synth Workbench",
-            VolumeStage::Wellfair => "WellFair & Anatomy",
-            VolumeStage::Wallet => "Wallet & Permissive Commons",
-            VolumeStage::Projects => "Projects · Cooperative Work-Graph",
-            VolumeStage::Anatomy => "Anatomy (Qap · 10D v2 HOLO)",
+            VolumeStage::Instruments => "AI Helpers",
+            VolumeStage::Poet => "Poet Studio",
+            VolumeStage::Wellfair => "WellFair",
+            VolumeStage::Wallet => "Wallet",
+            VolumeStage::Projects => "Projects",
+            VolumeStage::Anatomy => "Anatomy",
             VolumeStage::Settings => "Settings",
-            VolumeStage::Admin => "Admin · Operations & Fleet",
+            VolumeStage::Admin => "Admin",
         }
     }
 

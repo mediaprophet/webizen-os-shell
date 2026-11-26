@@ -1,0 +1,29 @@
+requires [capability("capability.invoke")];
+// WellFair physiological heart / care-dyad wavefield.
+// Closed heart-of-revolution with a cleft at the crown.
+let heart = capability.invoke("hypermedia.manifold.revolve", {
+  points: [
+    [0.38, 0.0],
+    [2.4, 1.4],
+    [6.1, 4.2],
+    [8.6, 8.2],
+    [8.9, 11.8],
+    [6.4, 15.1],
+    [3.0, 16.8],
+    [1.05, 16.2],
+    [0.36, 14.6]
+  ],
+  segments: 48,
+  caps: true
+});
+let ten_d = capability.invoke("hypermedia.manifold.compile_10d_pbr", {
+  mesh: heart,
+  topology: true,
+  spatial_index: true,
+  camera_position: [20.0, 12.0, 24.0],
+  camera_target: [0.0, 8.5, 0.0],
+  camera_up: [0.0, 1.0, 0.0],
+  camera_fov: 40.0,
+  camera_near: 0.1
+});
+let asset = { files: [{ key: "wellfair-vitals-dyad.10d", resource: ten_d }] };

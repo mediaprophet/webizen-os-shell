@@ -1,0 +1,29 @@
+requires [capability("capability.invoke")];
+// Community Grounds solar / battery microgrid landform.
+// Revolved catchment bowl with a raised panel bank.
+let landform = capability.invoke("hypermedia.manifold.revolve", {
+  points: [
+    [0.4, 0.0],
+    [10.0, 0.35],
+    [14.2, 1.7],
+    [18.4, 1.15],
+    [22.0, 3.55],
+    [24.2, 3.55],
+    [26.4, 2.7],
+    [28.6, 0.55],
+    [30.0, 0.28]
+  ],
+  segments: 48,
+  caps: true
+});
+let ten_d = capability.invoke("hypermedia.manifold.compile_10d_pbr", {
+  mesh: landform,
+  topology: true,
+  spatial_index: true,
+  camera_position: [34.0, 18.0, 38.0],
+  camera_target: [0.0, 2.4, 0.0],
+  camera_up: [0.0, 1.0, 0.0],
+  camera_fov: 42.0,
+  camera_near: 0.1
+});
+let asset = { files: [{ key: "commons-solar-microgrid.10d", resource: ten_d }] };

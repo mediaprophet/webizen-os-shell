@@ -90,7 +90,7 @@ pub use holo_10d_specimen::{
     resolve_holo_10d_specimen, seed_default_holo_10d_specimens, ConstituentLeafRef,
     HoloShaderVisualizationMode, MultiScaleStratumLayer, VerifiedHolo10dSpecimen,
     DEFAULT_HOLO_SPECIMENS, FIELD_KIND_HOLO_PHASE_SPACE, HOLO_HEADER_BYTES,
-    HOLO_MAX_RAYMARCH_STEPS,
+    HOLO_MAX_RAYMARCH_STEPS, UX_HOLO_SPECIMENS,
 };
 pub use host_daemon_runtime::{
     execute_hostd_command, handle_peer_p64_mcp_json_rpc_line, parse_hostd_args, run_daemon_tick,

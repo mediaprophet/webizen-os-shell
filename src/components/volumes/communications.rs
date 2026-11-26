@@ -6,7 +6,7 @@ use aether::refract::{
     AssertionEvidenceLevel, AssertionKind, ChallengeState, ContextualAssertionView,
 };
 
-use crate::state::{session, ShellState};
+use crate::state::{session, ShellState, VolumeStage};
 use webizen_ua_os::{validate_human_centric_host_nomenclature, IdentifierFabricPlane};
 
 #[component]
@@ -15,6 +15,12 @@ pub fn TalkVolume(mut state: Signal<ShellState>) -> Element {
     let messages = s.talk_messages.clone();
     let input = s.talk_input.clone();
     let tool_on = s.talk_agent_tool_active;
+    let contacts = conversation_people(&s.directory_contacts, &s.talk_active_contact);
+    let active_contact = if s.talk_active_contact.trim().is_empty() {
+        contacts.first().cloned().unwrap_or_else(|| "Elena Vance".into())
+    } else {
+        s.talk_active_contact.clone()
+    };
     let agent_turns: Vec<_> = s
         .llm_management
         .invocation_log
@@ -26,17 +32,25 @@ pub fn TalkVolume(mut state: Signal<ShellState>) -> Element {
     let mut talk_tool_status = use_signal(String::new);
     let tool_status = talk_tool_status.read().clone();
     let active_model = if s.active_model_name.is_empty() {
-        "No local model bound yet (select in Settings -> AI instruments)".to_string()
+        "No local model bound yet (select in Settings -> AI helpers)".to_string()
     } else {
         s.active_model_name.clone()
     };
     drop(s);
 
     let tool_label = if tool_on {
-        "Governed AI Tool Panel: OPEN (Tool Plane — explicitly distinct from human peers)"
+        "Local helper tool active (marked separately from people)"
     } else {
-        "Governed AI Tool Panel: CLOSED (Human-to-Human QDNF mode)"
+        "Direct person-to-person chat (no AI listening)"
     };
+    let visible_messages: Vec<(bool, String)> = messages
+        .iter()
+        .filter(|line| message_belongs_to_contact(line, &active_contact))
+        .map(|line| {
+            let outgoing = line.starts_with("You:") || line.starts_with("You ·");
+            (outgoing, line.clone())
+        })
+        .collect();
 
     rsx! {
         div {
@@ -46,11 +60,23 @@ pub fn TalkVolume(mut state: Signal<ShellState>) -> Element {
                 h3 { "Talk" }
                 p { class: "muted", "People you are talking with" }
                 ul {
-                    li {
-                        button {
-                            r#type: "button",
-                            class: "ribbon-btn active",
-                            "Human peer"
+                    for person in contacts {
+                        {
+                            let name = person.clone();
+                            let is_active = name == active_contact;
+                            rsx! {
+                                li {
+                                    key: "{person}",
+                                    button {
+                                        r#type: "button",
+                                        class: if is_active { "ribbon-btn active" } else { "ribbon-btn" },
+                                        onclick: move |_| {
+                                            state.write().talk_active_contact = name.clone();
+                                        },
+                                        "{person}"
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -73,11 +99,14 @@ pub fn TalkVolume(mut state: Signal<ShellState>) -> Element {
             }
             section {
                 class: "comms-pane-thread",
-                h3 { "Conversation" }
+                h3 { "Conversation with {active_contact}" }
                 ul {
                     class: "comms-messages",
-                    for m in messages {
-                        li { "{m}" }
+                    for (outgoing, line) in visible_messages {
+                        li {
+                            class: if outgoing { "chat-bubble outgoing" } else { "chat-bubble incoming" },
+                            "{line}"
+                        }
                     }
                 }
                 div {
@@ -95,7 +124,13 @@ pub fn TalkVolume(mut state: Signal<ShellState>) -> Element {
                             let mut s = state.write();
                             let msg = s.talk_input.trim().to_string();
                             if !msg.is_empty() {
+                                let peer = if s.talk_active_contact.trim().is_empty() {
+                                    "Elena Vance".into()
+                                } else {
+                                    s.talk_active_contact.clone()
+                                };
                                 s.talk_messages.push(format!("You: {msg}"));
+                                s.talk_messages.push(format!("{peer}: Received — I'll reply from this thread."));
                                 s.talk_input.clear();
                             }
                         },
@@ -167,7 +202,10 @@ pub fn MailVolume(mut state: Signal<ShellState>) -> Element {
     let messages = s.mail_messages.clone();
     let locator = s.mail_to_locator.clone();
     let subject = s.mail_subject.clone();
+    let body = s.mail_body.clone();
+    let selected = s.mail_selected.min(messages.len().saturating_sub(1));
     drop(s);
+    let selected_letter = messages.get(selected).cloned().unwrap_or_default();
 
     rsx! {
         div {
@@ -175,19 +213,41 @@ pub fn MailVolume(mut state: Signal<ShellState>) -> Element {
             aside {
                 class: "comms-pane-list",
                 h3 { "Mail" }
-                p { class: "muted", "Threads" }
+                p { class: "muted", "Inbox" }
                 ul {
                     if messages.is_empty() {
                         li { class: "muted", "No letters yet" }
                     }
-                    for m in messages.iter().rev().take(12) {
-                        li { "{m}" }
+                    for (index, m) in messages.iter().enumerate() {
+                        {
+                            let preview = m.clone();
+                            let is_sel = index == selected;
+                            rsx! {
+                                li {
+                                    key: "{index}",
+                                    button {
+                                        r#type: "button",
+                                        class: if is_sel { "ribbon-btn active" } else { "ribbon-btn" },
+                                        onclick: move |_| state.write().mail_selected = index,
+                                        "{preview}"
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
             section {
                 class: "comms-pane-thread",
                 h3 { "Read and write" }
+                if !selected_letter.is_empty() {
+                    article {
+                        class: "chat-bubble incoming",
+                        strong { "Selected letter" }
+                        p { "{selected_letter}" }
+                    }
+                }
+                h4 { "Write a Letter / Reply" }
                 div {
                     class: "input-row",
                     input {
@@ -202,25 +262,34 @@ pub fn MailVolume(mut state: Signal<ShellState>) -> Element {
                         placeholder: "Subject…",
                         oninput: move |evt| state.write().mail_subject = evt.value(),
                     }
-                    button {
-                        r#type: "button",
-                        class: "sanctum-issue",
-                        onclick: move |_| {
-                            let mut s = state.write();
-                            let to = s.mail_to_locator.trim().to_string();
-                            let subj = s.mail_subject.trim().to_string();
-                            if !to.is_empty() && !subj.is_empty() {
-                                s.mail_messages.push(format!("To {to} · {subj}"));
-                            }
-                        },
-                        "Send"
-                    }
                 }
-                ul {
-                    class: "comms-messages",
-                    for m in messages.iter() {
-                        li { "{m}" }
-                    }
+                textarea {
+                    class: "input-field",
+                    rows: "5",
+                    value: "{body}",
+                    placeholder: "Message…",
+                    oninput: move |evt| state.write().mail_body = evt.value(),
+                }
+                button {
+                    r#type: "button",
+                    class: "sanctum-issue",
+                    onclick: move |_| {
+                        let mut s = state.write();
+                        let to = s.mail_to_locator.trim().to_string();
+                        let subj = s.mail_subject.trim().to_string();
+                        let note = s.mail_body.trim().to_string();
+                        if !to.is_empty() && !subj.is_empty() {
+                            let row = if note.is_empty() {
+                                format!("To {to} · {subj}")
+                            } else {
+                                format!("To {to} · {subj} · {note}")
+                            };
+                            s.mail_messages.push(row);
+                            s.mail_selected = s.mail_messages.len().saturating_sub(1);
+                            s.mail_body.clear();
+                        }
+                    },
+                    "Send"
                 }
             }
         }
@@ -284,7 +353,7 @@ pub fn DirectoryVolume(mut state: Signal<ShellState>) -> Element {
                             s.beforeinput_guard_notice = DIRECTORY_GUARD_NOTICE.into();
                         } else {
                             s.directory_contacts.push(format!(
-                                "NaturalAgent (living-SHACL) · {name} · Directional pairwise locator minted"
+                                "{name} · Person & Peer · Private connection ready"
                             ));
                             s.directory_new_name.clear();
                             s.beforeinput_guard_notice.clear();
@@ -293,15 +362,55 @@ pub fn DirectoryVolume(mut state: Signal<ShellState>) -> Element {
                     "Mint Pairwise Relationship"
                 }
             }
+            p { class: "muted", "Each relationship gets its own private connection address so contacts cannot be tracked across apps." }
             if !guard_notice.is_empty() {
                 p { class: "muted", role: "status", "{guard_notice}" }
             }
             section {
                 class: "id-list",
-                h4 { "Known People & Organisational Peers" }
-                ul {
+                h4 { "People, family & cooperative contacts" }
+                div {
+                    class: "contact-card-grid",
                     for c in contacts {
-                        li { "{c}" }
+                        {
+                            let raw = c.clone();
+                            let name = contact_display_name(&raw);
+                            let role = contact_role(&raw);
+                            let chat_name = name.clone();
+                            let mail_name = name.clone();
+                            rsx! {
+                                article {
+                                    key: "{raw}",
+                                    class: "contact-card",
+                                    h5 { "{name}" }
+                                    p { class: "muted", "{role}" }
+                                    div {
+                                        class: "orb-sectors",
+                                        button {
+                                            r#type: "button",
+                                            class: "sanctum-issue",
+                                            onclick: move |_| {
+                                                let mut s = state.write();
+                                                s.talk_active_contact = chat_name.clone();
+                                                s.current_stage = VolumeStage::Talk;
+                                            },
+                                            "Chat in Talk"
+                                        }
+                                        button {
+                                            r#type: "button",
+                                            class: "ribbon-btn",
+                                            onclick: move |_| {
+                                                let mut s = state.write();
+                                                s.mail_to_locator = mail_name.clone();
+                                                s.mail_subject = format!("Hello {mail_name}");
+                                                s.current_stage = VolumeStage::Mail;
+                                            },
+                                            "Write in Mail"
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -326,6 +435,46 @@ fn parse_agent_mention(draft: &str) -> Option<(&str, &str)> {
 }
 
 const DIRECTORY_GUARD_NOTICE: &str = "Use Human-Centric terminology for directory labels.";
+
+fn contact_display_name(raw: &str) -> String {
+    raw.split(" · ").next().unwrap_or(raw).trim().to_string()
+}
+
+fn contact_role(raw: &str) -> String {
+    raw.split(" · ")
+        .nth(1)
+        .unwrap_or("Person & Peer")
+        .trim()
+        .to_string()
+}
+
+fn conversation_people(directory: &[String], active: &str) -> Vec<String> {
+    let mut people: Vec<String> = directory
+        .iter()
+        .map(|row| contact_display_name(row))
+        .filter(|name| !name.is_empty())
+        .collect();
+    if people.is_empty() {
+        people.extend([
+            "Elena Vance".into(),
+            "Jordan Hale".into(),
+            "Maya Chen".into(),
+            "Nest".into(),
+        ]);
+    }
+    if !active.trim().is_empty() && !people.iter().any(|name| name == active) {
+        people.insert(0, active.trim().to_string());
+    }
+    people
+}
+
+fn message_belongs_to_contact(line: &str, contact: &str) -> bool {
+    let first = contact.split_whitespace().next().unwrap_or(contact);
+    line.starts_with("You:")
+        || line.starts_with("You ·")
+        || line.contains(contact)
+        || (!first.is_empty() && line.starts_with(first))
+}
 
 fn directory_label_allowed(value: &str) -> bool {
     validate_human_centric_host_nomenclature(value).is_ok()

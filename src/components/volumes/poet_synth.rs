@@ -67,6 +67,23 @@ pub(super) fn resource_clipboard_notice(action: &str, text: Option<&str>) -> Str
     format!("{action}: {kind}")
 }
 
+fn insert_poet_markup(state: &mut Signal<ShellState>, markup: &str) {
+    let mut shell = state.write();
+    if !shell.poet_doc_input.is_empty() && !shell.poet_doc_input.ends_with('\n') {
+        shell.poet_doc_input.push('\n');
+    }
+    shell.poet_doc_input.push_str(markup);
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PoetStudioMode {
+    AllInOne,
+    Write,
+    Grid,
+    Forge,
+    Theme,
+}
+
 #[component]
 pub fn PoetSynthVolume(mut state: Signal<ShellState>) -> Element {
     let s = state.read();
@@ -129,6 +146,12 @@ pub fn PoetSynthVolume(mut state: Signal<ShellState>) -> Element {
             )
         })
         .collect();
+    let mut studio_mode = use_signal(|| PoetStudioMode::AllInOne);
+    let mode = studio_mode();
+    let show_write = matches!(mode, PoetStudioMode::AllInOne | PoetStudioMode::Write);
+    let show_grid = matches!(mode, PoetStudioMode::AllInOne | PoetStudioMode::Grid);
+    let show_forge = matches!(mode, PoetStudioMode::AllInOne | PoetStudioMode::Forge);
+    let show_theme = matches!(mode, PoetStudioMode::AllInOne | PoetStudioMode::Theme);
     let pillars = hypermedia_pillar_catalog();
     let pillar_count = pillars.len();
     let pillar_lines: Vec<String> = pillars
@@ -149,23 +172,148 @@ pub fn PoetSynthVolume(mut state: Signal<ShellState>) -> Element {
                 h3 { "Poet Studio" }
                 p { "Write a document, run a formula, and preview 3D work on the canvas." }
             }
-            textarea {
-                class: "input-field poet-editor-canvas",
-                aria_label: "Document editor",
-                value: "{document_input}",
-                rows: "12",
-                placeholder: "Start writing…",
-                oninput: move |evt| {
-                    let mut shell = state.write();
-                    shell.poet_doc_input = evt.value();
-                    shell.selection_range_label.clear();
-                },
+            div {
+                class: "volume-subtabs",
+                role: "tablist",
+                aria_label: "Poet Studio modes",
+                button {
+                    r#type: "button",
+                    class: if mode == PoetStudioMode::AllInOne { "ribbon-btn active" } else { "ribbon-btn" },
+                    onclick: move |_| studio_mode.set(PoetStudioMode::AllInOne),
+                    "All-in-One Studio"
+                }
+                button {
+                    r#type: "button",
+                    class: if mode == PoetStudioMode::Write { "ribbon-btn active" } else { "ribbon-btn" },
+                    onclick: move |_| studio_mode.set(PoetStudioMode::Write),
+                    "Write & Annotate"
+                }
+                button {
+                    r#type: "button",
+                    class: if mode == PoetStudioMode::Grid { "ribbon-btn active" } else { "ribbon-btn" },
+                    onclick: move |_| studio_mode.set(PoetStudioMode::Grid),
+                    "Grid & Formulas"
+                }
+                button {
+                    r#type: "button",
+                    class: if mode == PoetStudioMode::Forge { "ribbon-btn active" } else { "ribbon-btn" },
+                    onclick: move |_| studio_mode.set(PoetStudioMode::Forge),
+                    "3D & Synth Asset Forge"
+                }
+                button {
+                    r#type: "button",
+                    class: if mode == PoetStudioMode::Theme { "ribbon-btn active" } else { "ribbon-btn" },
+                    onclick: move |_| studio_mode.set(PoetStudioMode::Theme),
+                    "Theme Co-Designer"
+                }
             }
-            Holo10dViewport { state, specimen_label: "Studio canvas".to_string() }
-            ThemeCodesignerPanel { state }
-            SharedThemeCollectionPanel { state }
+            if show_write {
+                div {
+                    class: "studio-toolbar",
+                    role: "toolbar",
+                    aria_label: "Document formatting",
+                    button {
+                        r#type: "button",
+                        class: "ribbon-btn",
+                        onclick: move |_| insert_poet_markup(&mut state, "# "),
+                        "Heading"
+                    }
+                    button {
+                        r#type: "button",
+                        class: "ribbon-btn",
+                        onclick: move |_| insert_poet_markup(&mut state, "**"),
+                        "Bold"
+                    }
+                    button {
+                        r#type: "button",
+                        class: "ribbon-btn",
+                        onclick: move |_| insert_poet_markup(&mut state, "> "),
+                        "Quote"
+                    }
+                    button {
+                        r#type: "button",
+                        class: "ribbon-btn",
+                        onclick: move |_| insert_poet_markup(&mut state, "\n= 64 * 16\n"),
+                        "Formula Cell"
+                    }
+                    button {
+                        r#type: "button",
+                        class: "ribbon-btn",
+                        onclick: move |_| insert_poet_markup(&mut state, "\n[3D embed: holoslate-desk-totem]\n"),
+                        "3D Embed"
+                    }
+                }
+                textarea {
+                    class: "input-field poet-editor-canvas",
+                    aria_label: "Document editor",
+                    value: "{document_input}",
+                    rows: "12",
+                    placeholder: "Start writing…",
+                    oninput: move |evt| {
+                        let mut shell = state.write();
+                        shell.poet_doc_input = evt.value();
+                        shell.selection_range_label.clear();
+                    },
+                }
+            }
+            if show_forge {
+                div {
+                    class: "synth-preset-bar",
+                    role: "group",
+                    aria_label: "Webizen AI Synth 3D presets",
+                    button {
+                        r#type: "button",
+                        class: "sanctum-issue",
+                        onclick: move |_| {
+                            state.write().active_holo_specimen_id = "sanctuary-guardian-crest".into();
+                        },
+                        "Produce 3D Sanctuary Crest (.10d)"
+                    }
+                    button {
+                        r#type: "button",
+                        class: "sanctum-issue",
+                        onclick: move |_| {
+                            state.write().active_holo_specimen_id = "commons-solar-microgrid".into();
+                        },
+                        "Produce 3D Solar Microgrid (.10d)"
+                    }
+                    button {
+                        r#type: "button",
+                        class: "sanctum-issue",
+                        onclick: move |_| {
+                            state.write().active_holo_specimen_id = "wellfair-vitals-dyad".into();
+                        },
+                        "Produce 3D Vitals Dyad (.10d)"
+                    }
+                    button {
+                        r#type: "button",
+                        class: "ribbon-btn",
+                        onclick: move |_| {
+                            state.write().active_holo_specimen_id = "holoslate-desk-totem".into();
+                        },
+                        "Load Holoslate Desk Totem"
+                    }
+                }
+                Holo10dViewport { state, specimen_label: "Studio canvas".to_string() }
+            }
+            if show_theme {
+                ThemeCodesignerPanel { state }
+                SharedThemeCollectionPanel { state }
+            }
+            if show_grid {
+                section {
+                    class: "id-list",
+                    h4 { "Grid & formulas" }
+                    ul {
+                        for line in cell_lines.clone() {
+                            li { "{line}" }
+                        }
+                    }
+                }
+            }
             details {
                 class: "tech-details-drawer",
+                open: true,
                 summary { "Studio details" }
                 dl {
                     class: "kv",
@@ -327,31 +475,36 @@ pub fn PoetSynthVolume(mut state: Signal<ShellState>) -> Element {
                     }
                 }
             }
-            section {
-                class: "id-list",
-                h4 { "12 Hypermedia Production Pillars ({HYPERMEDIA_MORPHISM_COUNT} Morphisms Integrated)" }
-                ul {
-                    for p_line in pillar_lines {
-                        li { "{p_line}" }
-                    }
-                }
-            }
-            section {
-                class: "id-list",
-                h4 { "11 Native Etalon / Qualia VibeScript ABI Providers (TargetProfileMask::NATIVE_DESKTOP)" }
-                ul {
-                    for prov_line in provider_lines {
-                        li { "{prov_line}" }
-                    }
-                }
-            }
-            if !llm_lines.is_empty() {
+            details {
+                class: "tech-details-drawer",
+                open: true,
+                summary { "Studio inspector" }
                 section {
                     class: "id-list",
-                    h4 { "Unified Local SLD / LLM Vault Models ({llm_count})" }
+                    h4 { "Production catalog ({HYPERMEDIA_MORPHISM_COUNT} operations)" }
                     ul {
-                        for m_line in llm_lines {
-                            li { "{m_line}" }
+                        for p_line in pillar_lines {
+                            li { "{p_line}" }
+                        }
+                    }
+                }
+                section {
+                    class: "id-list",
+                    h4 { "Local providers ({provider_count})" }
+                    ul {
+                        for prov_line in provider_lines {
+                            li { "{prov_line}" }
+                        }
+                    }
+                }
+                if !llm_lines.is_empty() {
+                    section {
+                        class: "id-list",
+                        h4 { "Local models ({llm_count})" }
+                        ul {
+                            for m_line in llm_lines {
+                                li { "{m_line}" }
+                            }
                         }
                     }
                 }
