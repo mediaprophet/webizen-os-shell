@@ -13,7 +13,7 @@ use webizen_ua_os::{
     run_three_node_mesh_simulation, run_updater, validate_human_centric_host_nomenclature,
     ActorJuralPersonalityKind, DebianTargetProfile, HostDaemonConfig, HostNodeLocusKind,
     HostStewardshipArchetype, HostedProjectOwnershipStage, IncorporatedEntityPricingTier,
-    UpdateAction,
+    PairedIotDeviceRoleKind, UpdateAction,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -38,7 +38,7 @@ pub fn AdminVolume(state: Signal<ShellState>) -> Element {
                     r#type: "button",
                     class: if tab == AdminSubTab::FleetAndDebSuite { "ribbon-btn active" } else { "ribbon-btn" },
                     onclick: move |_| active_tab.set(AdminSubTab::FleetAndDebSuite),
-                    "1. Fleet Nodes, Daemon, 3-Node Mesh & Debian 13 .deb Suite"
+                    "1. Fleet Nodes, Daemon, 3-Node Mesh & Six-Target Debian Native .deb Suite"
                 }
                 button {
                     r#type: "button",
@@ -97,13 +97,14 @@ fn HostStewardshipAndFleetPanel(mut state: Signal<ShellState>, tab: AdminSubTab)
     let fleet_nodes = stewardship.host_fleet_nodes.clone();
     let hosted_projects = stewardship.hosted_projects.clone();
     let incorporated_entities = stewardship.incorporated_entities.clone();
+    let paired_iot_instruments = stewardship.paired_iot_instruments.clone();
 
     rsx! {
         div {
             class: "settings-volume",
             header {
                 class: "settings-head",
-                h3 { "Admin · Natural-Person & Cooperative Quorum Host Stewardship (webizen-host) + Tri-Target Debian 13 (Trixie) .deb Suite" }
+                h3 { "Admin · Natural-Person & Cooperative Quorum Host Stewardship (webizen-host) + Six-Target Debian Native .deb Suite (libc6 >= 2.36 Bookworm & Trixie)" }
                 p {
                     "Updating or mutating a webizen-host server ({host_domain} · {host_endpoint}) never happens via an unauthenticated vendor push or unilateral bot auto-update. It relies upon the accountable Natural Person (or M-of-N group of Natural Persons) who steward it through their Desktop (webizen-desktop-appliance.deb) and Mobile AVF Pocket Sanctuary (webizen-mobile-avf.deb) apparatus."
                 }
@@ -139,7 +140,7 @@ fn HostStewardshipAndFleetPanel(mut state: Signal<ShellState>, tab: AdminSubTab)
                 // 1. Tri-Target Debian 13 (Trixie) .deb Packaging Matrix (Desktop amd64 + Mobile AVF arm64 + Host amd64)
                 section {
                 class: "id-list",
-                h4 { "Tri-Target Debian 13 (Trixie) .deb Packaging Architecture (Single Rust Workspace -> Desktop, Mobile AVF pKVM EL2 & Host)" }
+                h4 { "Six-Target Debian Native .deb Packaging Architecture (libc6 >= 2.36 · Bookworm & Trixie · Desktop, WSL2/Lima Subsystem, Mobile AVF, Host, IoT Headless, IoT Display)" }
                 div {
                     class: "plane-grid",
                     for profile in DebianTargetProfile::ALL {
@@ -148,12 +149,13 @@ fn HostStewardshipAndFleetPanel(mut state: Signal<ShellState>, tab: AdminSubTab)
                             let p_pkg = profile.deb_package_name();
                             let p_arch = profile.architecture();
                             let p_role = profile.role_in_human_fabric();
+                            let p_libc = profile.libc6_depends();
                             rsx! {
                                 div {
                                     key: "{p_pkg}",
                                     class: "plane-card",
                                     h5 { "{p_title}" }
-                                    p { "Debian Package: {p_pkg}_0.1.0_{p_arch}.deb (Debian 13 Trixie)" }
+                                    p { "Debian Package: {p_pkg}_0.1.0_{p_arch}.deb · {p_libc} Bookworm & Trixie compatible" }
                                     p { "{p_role}" }
                                 }
                             }
@@ -166,7 +168,7 @@ fn HostStewardshipAndFleetPanel(mut state: Signal<ShellState>, tab: AdminSubTab)
                         r#type: "button",
                         class: "sanctum-issue",
                         onclick: move |_| build_appliance_packages(state),
-                        "Generate Tri-Target Debian 13 (Trixie) .deb Suite (Desktop amd64 + Mobile AVF arm64 + webizen-hostd)"
+                        "Generate Six-Target Debian Native .deb Suite (libc6 >= 2.36 Bookworm & Trixie)"
                     }
                     button {
                         r#type: "button",
@@ -204,6 +206,140 @@ fn HostStewardshipAndFleetPanel(mut state: Signal<ShellState>, tab: AdminSubTab)
                     p { class: "path", "Delivery: {delivery}" }
                 }
             }
+
+                section {
+                    class: "id-list",
+                    h4 { "Local Paired IoT, Robotics, Home-Automation & Shop Display Signage Instruments (Zero Vendor Cloud · Zero Foreign Crypto)" }
+                    p {
+                        class: "muted",
+                        "Robotics controllers, homestead automation hubs, and shop-display kiosks are governed instruments paired to a local NaturalAgent steward. They never subclass owl:Thing, never phone home to vendor clouds, and never require foreign crypto rails."
+                    }
+                    div {
+                        class: "plane-grid",
+                        for instrument in &paired_iot_instruments {
+                            {
+                                let i_did = instrument.instrument_did.clone();
+                                let i_did_bus = i_did.clone();
+                                let i_did_signage = i_did.clone();
+                                let i_label = instrument.label.clone();
+                                let i_role = instrument.role.title();
+                                let i_parent = instrument.paired_parent_node_id.clone();
+                                let i_steward = instrument.authorizing_steward_did.clone();
+                                let i_arch = instrument.architecture.clone();
+                                let i_endpoint = instrument.local_lan_or_qdnf_endpoint.clone();
+                                let i_gpu = if instrument.has_gpu_display {
+                                    "GPU display armed"
+                                } else {
+                                    "Headless (zero GUI / Vulkan)"
+                                };
+                                let i_cpu = if instrument.cpu_softbuffer_fallback_armed {
+                                    "vello-cpu-softbuffer fallback armed"
+                                } else {
+                                    "CPU fallback idle"
+                                };
+                                let i_receipt = if instrument.last_bus_command_receipt.is_empty() {
+                                    "No bus command yet".to_string()
+                                } else {
+                                    instrument.last_bus_command_receipt.clone()
+                                };
+                                let i_signage = instrument
+                                    .active_signage_hmc_digest
+                                    .clone()
+                                    .unwrap_or_else(|| "No QECP playlist activated".into());
+                                let i_qecp = if instrument.active_signage_qecp_verified {
+                                    "QECP verified (collect != activate)"
+                                } else {
+                                    "QECP idle"
+                                };
+                                let show_bus = matches!(
+                                    instrument.role,
+                                    PairedIotDeviceRoleKind::RoboticsActuatorController
+                                        | PairedIotDeviceRoleKind::HomeAutomationSensorHub
+                                );
+                                let show_signage = instrument.role
+                                    == PairedIotDeviceRoleKind::RetailDisplaySignageKiosk;
+                                rsx! {
+                                    div {
+                                        key: "{i_did}",
+                                        class: "plane-card",
+                                        h5 { "{i_label}" }
+                                        p { "Instrument DID: {i_did} · {i_role} · {i_arch}" }
+                                        p { "Parent host pairing: {i_parent} · Steward: {i_steward}" }
+                                        p { "Endpoint: {i_endpoint} · {i_gpu} · {i_cpu}" }
+                                        p { "Last bus receipt: {i_receipt}" }
+                                        p { "Signage: {i_signage} · {i_qecp}" }
+                                        if show_bus {
+                                            button {
+                                                r#type: "button",
+                                                class: "sanctum-issue",
+                                                onclick: move |_| {
+                                                    if let Some(sess) = session() {
+                                                        let mut s = state.write();
+                                                        match s.host_stewardship.execute_local_iot_bus_command(
+                                                            &sess.host.storage,
+                                                            &i_did_bus,
+                                                            "gpio-pwm",
+                                                            "local-zero-cloud-actuation",
+                                                        ) {
+                                                            Ok(updated) => {
+                                                                s.refresh_host_profiles();
+                                                                s.host_stewardship_toast = format!(
+                                                                    "Local bus command on {} · {}",
+                                                                    updated.instrument_did,
+                                                                    updated.last_bus_command_receipt
+                                                                );
+                                                            }
+                                                            Err(error) => s.host_stewardship_toast = error,
+                                                        }
+                                                    }
+                                                },
+                                                "Trigger Local Robotics/Automation Bus Command (Zero Cloud)"
+                                            }
+                                        }
+                                        if show_signage {
+                                            button {
+                                                r#type: "button",
+                                                class: "sanctum-issue",
+                                                onclick: move |_| {
+                                                    if let Some(sess) = session() {
+                                                        let mut s = state.write();
+                                                        let steward = s.host_vote_steward_input.clone();
+                                                        let steward = if steward.trim().is_empty() {
+                                                            s.host_stewardship
+                                                                .stewards
+                                                                .first()
+                                                                .map(|st| st.steward_did.clone())
+                                                                .unwrap_or_default()
+                                                        } else {
+                                                            steward
+                                                        };
+                                                        match s.host_stewardship.activate_iot_display_signage_hmc(
+                                                            &sess.host.storage,
+                                                            &i_did_signage,
+                                                            "sanctuary://signage/shopfront-playlist.hmc",
+                                                            "qecp-sig-shopfront-activate",
+                                                            &steward,
+                                                        ) {
+                                                            Ok(updated) => {
+                                                                s.refresh_host_profiles();
+                                                                s.host_stewardship_toast = format!(
+                                                                    "Activated QECP playlist on {} (collect != activate)",
+                                                                    updated.instrument_did
+                                                                );
+                                                            }
+                                                            Err(error) => s.host_stewardship_toast = error,
+                                                        }
+                                                    }
+                                                },
+                                                "Activate QECP-Verified .hmc Shop Display Playlist (collect != activate)"
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
             if tab == AdminSubTab::StewardsAndQuorum {
@@ -661,6 +797,9 @@ fn HostStewardshipAndFleetPanel(mut state: Signal<ShellState>, tab: AdminSubTab)
                                                 locus,
                                                 HostNodeLocusKind::HomeServerAppliance
                                                     | HostNodeLocusKind::CamperMobileRigNode
+                                                    | HostNodeLocusKind::SecondOsSubsystemLocus
+                                                    | HostNodeLocusKind::PairedIotHeadlessInstrument
+                                                    | HostNodeLocusKind::PairedIotDisplaySignageAppliance
                                             );
                                             if let Ok(added) = s.host_stewardship.register_host_fleet_node(
                                                 &sess.host.storage,

@@ -1,0 +1,201 @@
+name: Webizen OS-Shell Debian Native Release
+
+# PLAN-WEBIZEN-DEBIAN-NATIVE-PROFILES-2026-11-26 WP-5
+# Builds webizen-os-shell and webizen-hostd inside debian:bookworm (glibc 2.36).
+
+on:
+  push:
+    branches: ["main", "0.0.40-*", "0.0.41-*"]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  debian-bookworm:
+    name: ${{ matrix.cargo_profile }} ${{ matrix.arch }} (${{ matrix.bin }})
+    runs-on: ${{ matrix.runner }}
+    container: debian:bookworm
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            arch: amd64
+            rust_target: x86_64-unknown-linux-gnu
+            cargo_profile: webizen-desktop
+            features: webizen-native-desktop
+            bin: webizen-os-shell
+            extra_flags: ""
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+            rust_target: aarch64-unknown-linux-gnu
+            cargo_profile: webizen-desktop
+            features: webizen-native-desktop
+            bin: webizen-os-shell
+            extra_flags: ""
+          - runner: ubuntu-latest
+            arch: amd64
+            rust_target: x86_64-unknown-linux-gnu
+            cargo_profile: webizen-subsystem
+            features: webizen-native-subsystem
+            bin: webizen-os-shell
+            extra_flags: ""
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+            rust_target: aarch64-unknown-linux-gnu
+            cargo_profile: webizen-subsystem
+            features: webizen-native-subsystem
+            bin: webizen-os-shell
+            extra_flags: ""
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+            rust_target: aarch64-unknown-linux-gnu
+            cargo_profile: webizen-mobile
+            features: webizen-native-mobile
+            bin: webizen-os-shell
+            extra_flags: ""
+          - runner: ubuntu-latest
+            arch: amd64
+            rust_target: x86_64-unknown-linux-gnu
+            cargo_profile: webizen-iot-display
+            features: webizen-native-iot-display
+            bin: webizen-os-shell
+            extra_flags: ""
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+            rust_target: aarch64-unknown-linux-gnu
+            cargo_profile: webizen-iot-display
+            features: webizen-native-iot-display
+            bin: webizen-os-shell
+            extra_flags: ""
+          - runner: ubuntu-latest
+            arch: amd64
+            rust_target: x86_64-unknown-linux-gnu
+            cargo_profile: webizen-host
+            features: webizen-native-host
+            bin: webizen-hostd
+            extra_flags: "--no-default-features"
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+            rust_target: aarch64-unknown-linux-gnu
+            cargo_profile: webizen-host
+            features: webizen-native-host
+            bin: webizen-hostd
+            extra_flags: "--no-default-features"
+
+    steps:
+      - name: Install Debian bookworm native build dependencies
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            ca-certificates curl git build-essential pkg-config \
+            libssl-dev libvulkan-dev libwayland-dev libx11-dev \
+            libxkbcommon-dev libfontconfig1-dev libasound2-dev \
+            binutils file dpkg-dev zstd debootstrap
+          if dpkg -l | grep -Eqi 'libwebkit2gtk|libjavascriptcoregtk'; then
+            echo "WebKit2GTK / JavaScriptCore must not be installed for native Debian os-shell" >&2
+            exit 1
+          fi
+
+      # Preserve the local C:\github layout so path deps resolve:
+      #   webizenai/webizen-os-shell/Cargo.toml -> ../../Aether, ../../etalon, ../../qualiaDB, ../../hypermedia-production
+      #   crates/webizen-ua-os/Cargo.toml     -> ../../../../anvil, ../../../../qualiaDB, ../../../../etalon
+      - name: Checkout webizen-os-shell
+        uses: actions/checkout@v4
+        with:
+          path: webizenai/webizen-os-shell
+
+      - name: Checkout Aether
+        uses: actions/checkout@v4
+        with:
+          repository: mediaprophet/Aether
+          path: Aether
+
+      - name: Checkout etalon
+        uses: actions/checkout@v4
+        with:
+          repository: mediaprophet/etalon
+          ref: 0.0.41.3
+          path: etalon
+
+      - name: Checkout QualiaDB
+        uses: actions/checkout@v4
+        with:
+          repository: mediaprophet/qualiaDB
+          ref: 0.0.41.3
+          path: qualiaDB
+
+      - name: Checkout hypermedia-production
+        uses: actions/checkout@v4
+        with:
+          repository: mediaprophet/hypermedia-production
+          ref: 0.0.41.3
+          path: hypermedia-production
+
+      - name: Checkout anvil
+        uses: actions/checkout@v4
+        with:
+          repository: mediaprophet/anvil
+          path: anvil
+
+      - name: Checkout qap-compiler (verify + .deb helpers)
+        uses: actions/checkout@v4
+        with:
+          repository: mediaprophet/qap-compiler
+          path: qap-compiler
+
+      - name: Install Rust toolchain
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          rustup target add ${{ matrix.rust_target }}
+
+      - name: Build ${{ matrix.bin }}
+        working-directory: webizenai/webizen-os-shell
+        run: |
+          cargo build --manifest-path Cargo.toml \
+            --profile ${{ matrix.cargo_profile }} \
+            --bin ${{ matrix.bin }} \
+            --features ${{ matrix.features }} \
+            ${{ matrix.extra_flags }} \
+            --target ${{ matrix.rust_target }} \
+            --target-dir target-debian-profiles
+
+      - name: Verify Debian glibc 2.36 baseline and no WebKit2GTK
+        run: |
+          BIN="webizenai/webizen-os-shell/target-debian-profiles/${{ matrix.rust_target }}/${{ matrix.cargo_profile }}/${{ matrix.bin }}"
+          bash qap-compiler/packaging/debian/verify-debian-binary.sh \
+            --profile ${{ matrix.cargo_profile }} --bin "$BIN"
+
+      - name: Package .deb
+        run: |
+          BIN="webizenai/webizen-os-shell/target-debian-profiles/${{ matrix.rust_target }}/${{ matrix.cargo_profile }}/${{ matrix.bin }}"
+          VERSION="${GITHUB_REF_NAME#v}"
+          mkdir -p dist
+          bash qap-compiler/packaging/debian/build-deb.sh \
+            --profile ${{ matrix.cargo_profile }} \
+            --arch ${{ matrix.arch }} \
+            --pkg-name ${{ matrix.bin }} \
+            --version "$VERSION" \
+            --bin "$BIN" \
+            --out-dir dist
+
+      - name: Stage Second-OS .wsl rootfs (subsystem profile)
+        if: matrix.cargo_profile == 'webizen-subsystem'
+        run: |
+          bash qap-compiler/packaging/debian/build-wsl-rootfs.sh \
+            --arch ${{ matrix.arch }} \
+            --version "${GITHUB_REF_NAME#v}" \
+            --out-dir dist
+
+      - name: Upload Debian native artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.bin }}-${{ matrix.cargo_profile }}-${{ matrix.arch }}
+          path: |
+            webizenai/webizen-os-shell/target-debian-profiles/${{ matrix.rust_target }}/${{ matrix.cargo_profile }}/${{ matrix.bin }}
+            dist/*
+          if-no-files-found: error

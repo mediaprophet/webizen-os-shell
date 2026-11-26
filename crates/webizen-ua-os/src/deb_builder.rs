@@ -196,29 +196,39 @@ pub fn build_deb_from_tree(
     })
 }
 
-/// Build Desktop, Mobile AVF and Host packages in the suite's output directory.
+/// Build all staged Debian native packages in the suite's output directory (six-target when present).
 pub fn build_tri_target_debs_from_receipt(
     suite: &TriTargetDebianSuiteReceipt,
 ) -> Result<Vec<DebBuildReceipt>, String> {
-    [
+    let mut trees: Vec<&PathBuf> = vec![
         &suite.desktop_deb_tree,
         &suite.mobile_avf_deb_tree,
         &suite.host_deb_tree,
-    ]
-    .into_iter()
-    .map(|tree| {
-        let name = tree
-            .file_name()
-            .and_then(|name| name.to_str())
-            .ok_or_else(|| {
-                format!(
-                    "invalid package staging directory name at {}",
-                    tree.display()
-                )
-            })?;
-        build_deb_from_tree(tree, &suite.suite_root_dir.join(format!("{name}.deb")))
-    })
-    .collect()
+    ];
+    for extra in [
+        &suite.subsystem_wsl_deb_tree,
+        &suite.iot_headless_deb_tree,
+        &suite.iot_display_deb_tree,
+    ] {
+        if !extra.as_os_str().is_empty() {
+            trees.push(extra);
+        }
+    }
+    trees
+        .into_iter()
+        .map(|tree| {
+            let name = tree
+                .file_name()
+                .and_then(|name| name.to_str())
+                .ok_or_else(|| {
+                    format!(
+                        "invalid package staging directory name at {}",
+                        tree.display()
+                    )
+                })?;
+            build_deb_from_tree(tree, &suite.suite_root_dir.join(format!("{name}.deb")))
+        })
+        .collect()
 }
 
 const APT_ARCHITECTURES: [&str; 2] = ["amd64", "arm64"];
@@ -1661,14 +1671,22 @@ mod tests {
             ("webizen-desktop-appliance", "amd64"),
             ("webizen-mobile-avf", "arm64"),
             ("webizen-hostd", "amd64"),
+            ("webizen-subsystem-wsl", "amd64"),
+            ("webizen-iot-headless", "arm64"),
+            ("webizen-iot-display", "arm64"),
         ];
-        let [desktop_deb_tree, mobile_avf_deb_tree, host_deb_tree] =
-            targets.map(|(name, arch)| stage_package(&tmp.0, name, arch));
+        let staged: Vec<PathBuf> = targets
+            .iter()
+            .map(|(name, arch)| stage_package(&tmp.0, name, arch))
+            .collect();
         let suite = TriTargetDebianSuiteReceipt {
             suite_root_dir: tmp.0.clone(),
-            desktop_deb_tree,
-            mobile_avf_deb_tree,
-            host_deb_tree,
+            desktop_deb_tree: staged[0].clone(),
+            mobile_avf_deb_tree: staged[1].clone(),
+            host_deb_tree: staged[2].clone(),
+            subsystem_wsl_deb_tree: staged[3].clone(),
+            iot_headless_deb_tree: staged[4].clone(),
+            iot_display_deb_tree: staged[5].clone(),
             built_deb_packages: Vec::new(),
             apt_repository: None,
             host_state_cbor_ld_path: PathBuf::new(),
@@ -1679,7 +1697,7 @@ mod tests {
             quorum_threshold_m: 0,
         };
         let receipts = build_tri_target_debs_from_receipt(&suite).unwrap();
-        assert_eq!(receipts.len(), 3);
+        assert_eq!(receipts.len(), 6);
         let expected_settings_path = format!("./etc/{}/settings.conf", "x".repeat(95));
         for ((name, arch), receipt) in targets.into_iter().zip(&receipts) {
             assert_eq!(receipt.package_name, name);

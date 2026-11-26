@@ -83,53 +83,65 @@ fn validate_host_field(text: &str, label: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// The three unified Debian 13 (Trixie) `.deb` package targets built from the same Rust workspace
+/// The six unified Debian native `.deb` package targets built from the same Rust workspace
 /// (`qualiadb`, `etalon`, `anvil`, `vibescript`, `webizen-ua-os`, `webizen-os-shell`, `webizen-hostd`).
+/// Every control file depends on `libc6 (>= 2.36)` so packages install on Debian 12 (`bookworm`)
+/// and Debian 13 (`trixie`), Raspberry Pi OS, Mobian, and WSL2 Debian.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DebianTargetProfile {
-    /// **Target 1 — Desktop / Workstation Steward Node (`webizen-desktop-appliance`, `amd64` / `arm64`)**:
-    /// Runs on Debian 13 Trixie (Wayland `cage` DRM/KMS appliance or Guest `.deb` on Linux/WSL2).
-    /// Equips the natural person with the Four-Plane Identifier Fabric, Sanctuary Keep (`:8080`),
-    /// Poet + 150-morphism Synth workbench, and primary `webizen-host` Steward & Quorum Signer console.
+    /// **Target 1 — Desktop / Workstation Steward Node (`webizen-desktop-appliance`, `amd64`)**.
     DesktopStewardNode,
-    /// **Target 2 — Mobile Pocket Sanctuary & Co-Signer (`webizen-mobile-avf`, `arm64`)**:
-    /// Runs unmodified Debian 13 Trixie `arm64` inside **Android 16 AVF (`pKVM` EL2 Protected VM + `crosvm`)**
-    /// or native **Mobian Trixie**. Isolates WellFair Sanctuary RAM at EL2 from the host Android OS,
-    /// binds `pvmfw -> anvil` DICE hardware attestation, runs Etalon native Vulkan over `virtio-gpu` /
-    /// `gfxstream` (bypassing mobile browser WebGPU bans), routes public tensor workloads over
-    /// `vhost-vsock` (CID 2), and acts as the natural person's pocket `M-of-N` quorum co-signer and
-    /// guardianship approval apparatus.
+    /// **Target 2 — Second-OS / WSL2 / Lima Sanctuary Appliance (`webizen-subsystem-wsl`, `amd64`)**:
+    /// Isolated `ext4.vhdx` mount guard rejecting `/mnt/c`, `9p`, `drvfs`, `virtiofs`, plus mirrored
+    /// LAN IoT discovery for local Raspberry Pi / robotics / signage pairing.
+    SubsystemSecondOsNode,
+    /// **Target 3 — Mobile Pocket Sanctuary & Co-Signer (`webizen-mobile-avf`, `arm64`)**.
     MobileAvfSanctuaryNode,
-    /// **Target 3 — Human-Centric Linux Host Platform (`webizen-hostd`, `amd64` / `arm64`)**:
-    /// Runs on Debian 13 Trixie VPS, bare-metal server, or Raspberry Pi / Community Grounds microgrid node.
-    /// Hosts `ns.webcivics.net` content-negotiated virtual namespaces, $O(1)$ `NQuin` DNS + `QPolicy`
-    /// nftables/eBPF firewall, Three-Tier Multi-Tenant Sandbox, Relationship-Scoped Mail, `Q-CDN`,
-    /// Two-Loop Permissive Commons, and client-encrypted `.q42j` Shamir backups — governed strictly
-    /// by the natural person(s) who steward it viaDesktop/Mobile quorum ratification.
+    /// **Target 4 — Human-Centric Linux Host Platform (`webizen-hostd`, `amd64`)**.
     HostServerPlatformNode,
+    /// **Target 5 — Raspberry Pi / Robotics / Home Automation Headless Instrument (`webizen-iot-headless`, `arm64`)**:
+    /// Zero GUI / Vulkan dependencies; GPIO / PWM / CAN / I2C actuation under local steward pairing.
+    IotHeadlessInstrumentNode,
+    /// **Target 6 — GPU-Equipped Retail Shop Display Signage & Kiosk (`webizen-iot-display`, `arm64`)**:
+    /// Vulkan / GLES + `vello-cpu-softbuffer` fallback; QECP `collect != activate` playlist gate.
+    IotDisplaySignageNode,
 }
 
 impl DebianTargetProfile {
-    pub const ALL: [Self; 3] = [
+    pub const ALL: [Self; 6] = [
         Self::DesktopStewardNode,
+        Self::SubsystemSecondOsNode,
         Self::MobileAvfSanctuaryNode,
         Self::HostServerPlatformNode,
+        Self::IotHeadlessInstrumentNode,
+        Self::IotDisplaySignageNode,
     ];
 
     pub const fn deb_package_name(self) -> &'static str {
         match self {
             Self::DesktopStewardNode => "webizen-desktop-appliance",
+            Self::SubsystemSecondOsNode => "webizen-subsystem-wsl",
             Self::MobileAvfSanctuaryNode => "webizen-mobile-avf",
             Self::HostServerPlatformNode => "webizen-hostd",
+            Self::IotHeadlessInstrumentNode => "webizen-iot-headless",
+            Self::IotDisplaySignageNode => "webizen-iot-display",
         }
     }
 
     pub const fn architecture(self) -> &'static str {
         match self {
-            Self::DesktopStewardNode => "amd64",
-            Self::MobileAvfSanctuaryNode => "arm64",
-            Self::HostServerPlatformNode => "amd64",
+            Self::DesktopStewardNode | Self::SubsystemSecondOsNode | Self::HostServerPlatformNode => {
+                "amd64"
+            }
+            Self::MobileAvfSanctuaryNode
+            | Self::IotHeadlessInstrumentNode
+            | Self::IotDisplaySignageNode => "arm64",
         }
+    }
+
+    /// Debian 12 `bookworm` glibc baseline (forward-compatible with Debian 13 `trixie`).
+    pub const fn libc6_depends(self) -> &'static str {
+        "libc6 (>= 2.36)"
     }
 
     pub const fn title(self) -> &'static str {
@@ -137,11 +149,20 @@ impl DebianTargetProfile {
             Self::DesktopStewardNode => {
                 "Target 1 · Desktop Steward & Authoring Node (webizen-desktop-appliance_0.1.0_amd64.deb)"
             }
+            Self::SubsystemSecondOsNode => {
+                "Target 2 · WSL2 / Lima Second-OS Sanctuary Appliance (webizen-subsystem-wsl_0.1.0_amd64.deb)"
+            }
             Self::MobileAvfSanctuaryNode => {
-                "Target 2 · Mobile AVF pKVM EL2 Sanctuary & Pocket Co-Signer (webizen-mobile-avf_0.1.0_arm64.deb)"
+                "Target 3 · Mobile AVF pKVM EL2 Sanctuary & Pocket Co-Signer (webizen-mobile-avf_0.1.0_arm64.deb)"
             }
             Self::HostServerPlatformNode => {
-                "Target 3 · Human-Centric Linux Host Platform (webizen-hostd_0.1.0_amd64.deb)"
+                "Target 4 · Human-Centric Linux Host Platform (webizen-hostd_0.1.0_amd64.deb)"
+            }
+            Self::IotHeadlessInstrumentNode => {
+                "Target 5 · Raspberry Pi / Robotics / Home-Automation Headless Instrument (webizen-iot-headless_0.1.0_arm64.deb)"
+            }
+            Self::IotDisplaySignageNode => {
+                "Target 6 · GPU Retail Shop Display Signage & Kiosk (webizen-iot-display_0.1.0_arm64.deb)"
             }
         }
     }
@@ -149,16 +170,99 @@ impl DebianTargetProfile {
     pub const fn role_in_human_fabric(self) -> &'static str {
         match self {
             Self::DesktopStewardNode => {
-                "Primary workstation where the natural person authors works (Poet/Synth), manages their Four-Plane Identifier Fabric, curates Sanctuary Keep (:8080), and proposes/signs updates for their webizen-host server."
+                "Primary workstation where the natural person authors works (Poet/Synth), manages their Four-Plane Identifier Fabric, curates Sanctuary Keep (:8080), pairs local IoT instruments, and proposes/signs updates for their webizen-host server. libc6 >= 2.36 Bookworm & Trixie compatible."
+            }
+            Self::SubsystemSecondOsNode => {
+                "Second-OS Sanctuary Appliance (WSL2 .wsl / macOS Lima) with ext4.vhdx mount guard rejecting /mnt/c, 9p, drvfs, virtiofs; Mesa dzn Vulkan-on-D3D12 + vello-cpu-softbuffer fallback; mirrored LAN IoT discovery. libc6 >= 2.36 Bookworm & Trixie compatible."
             }
             Self::MobileAvfSanctuaryNode => {
-                "Hardware-isolated Debian 13 arm64 micro-VM on the phone (Android 16 AVF pKVM EL2 / Mobian Trixie) with DICE pvmfw->anvil attestation, gfxstream native Vulkan for Qaps, vhost-vsock NPU bridge, WellFair Sanctuary Keep, and pocket M-of-N quorum co-signing for webizen-host updates."
+                "Hardware-isolated Debian arm64 micro-VM on the phone (Android 16 AVF pKVM EL2 / Mobian) with DICE pvmfw->anvil attestation, gfxstream native Vulkan for Qaps, vhost-vsock NPU bridge, WellFair Sanctuary Keep, and pocket M-of-N quorum co-signing. libc6 >= 2.36 Bookworm & Trixie compatible."
             }
             Self::HostServerPlatformNode => {
-                "Always-on Debian 13 Trixie VPS / Community Grounds node (:4242) executing NQuin DNS, QDNF mesh, Solid Databox, Q-CDN, and client-encrypted .q42j Shamir backups — refuses any binary or config update unless ratified by its responsible natural-person steward(s)."
+                "Always-on Debian VPS / Community Grounds node (:4242) executing NQuin DNS, QDNF mesh, Solid Databox, Q-CDN, and client-encrypted .q42j Shamir backups — refuses any binary or config update unless ratified by its responsible natural-person steward(s). libc6 >= 2.36 Bookworm & Trixie compatible."
+            }
+            Self::IotHeadlessInstrumentNode => {
+                "Governed Raspberry Pi / robotics / home-automation instrument (zero GUI/Vulkan). Boots unpaired; actuation requires local NaturalAgent steward pairing plus IoTActuator.command_bus. Never a peer NaturalAgent. libc6 >= 2.36 Bookworm, Trixie & Raspberry Pi OS compatible."
+            }
+            Self::IotDisplaySignageNode => {
+                "Governed GPU shop-display / kiosk instrument (Vulkan/GLES + vello-cpu-softbuffer fallback). QECP-signed .hmc / .10d playlists enforce collect != activate. Never a peer NaturalAgent. libc6 >= 2.36 Bookworm, Trixie & Raspberry Pi OS compatible."
             }
         }
     }
+}
+
+/// Local IoT / robotics / home-automation / shop-signage instrument role.
+/// Instruments are governed tools (`IdentifierFabricPlane::Instrument`), never peer NaturalAgents.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PairedIotDeviceRoleKind {
+    /// Raspberry Pi / embedded robotics controller (GPIO/PWM/CAN/Modbus/I2C/SPI under SlgArena deontic guard).
+    RoboticsActuatorController,
+    /// Local home/homestead automation & sensor hub (zero cloud phone-home, zero foreign crypto).
+    HomeAutomationSensorHub,
+    /// GPU-equipped shop window display advertising & interactive kiosk (Vulkan/GLES + CPU fallback, QECP collect != activate).
+    RetailDisplaySignageKiosk,
+}
+
+impl PairedIotDeviceRoleKind {
+    pub const ALL: [Self; 3] = [
+        Self::RoboticsActuatorController,
+        Self::HomeAutomationSensorHub,
+        Self::RetailDisplaySignageKiosk,
+    ];
+
+    pub const fn title(self) -> &'static str {
+        match self {
+            Self::RoboticsActuatorController => "Robotics Actuator Controller (GPIO/PWM/CAN/I2C)",
+            Self::HomeAutomationSensorHub => "Home / Homestead Automation Sensor Hub",
+            Self::RetailDisplaySignageKiosk => "Retail Shop Display Signage & Kiosk",
+        }
+    }
+
+    pub const fn debian_profile(self) -> DebianTargetProfile {
+        match self {
+            Self::RoboticsActuatorController | Self::HomeAutomationSensorHub => {
+                DebianTargetProfile::IotHeadlessInstrumentNode
+            }
+            Self::RetailDisplaySignageKiosk => DebianTargetProfile::IotDisplaySignageNode,
+        }
+    }
+
+    pub fn zcap_capability_ids(self) -> Vec<String> {
+        match self {
+            Self::RoboticsActuatorController | Self::HomeAutomationSensorHub => vec![
+                "IoTInstrument.pair_with_steward_host".into(),
+                "IoTActuator.command_bus".into(),
+                "IoTSensing.bridge_observation".into(),
+            ],
+            Self::RetailDisplaySignageKiosk => vec![
+                "IoTInstrument.pair_with_steward_host".into(),
+                "IoTSignage.present_verified_hmc".into(),
+            ],
+        }
+    }
+}
+
+/// Ledger record for a locally paired IoT / robotics / home-automation / shop-signage instrument.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PairedIotEdgeInstrumentRecord {
+    pub instrument_did: String,
+    pub label: String,
+    pub role: PairedIotDeviceRoleKind,
+    pub debian_profile: DebianTargetProfile,
+    pub architecture: String,
+    /// Which local parent host (`node:home-homestead-server`, `node:wsl2-second-os`, etc.) paired this instrument.
+    pub paired_parent_node_id: String,
+    /// Accountable natural-person steward (`did:qi:...`) who authorized the ZCAP-LD delegation.
+    pub authorizing_steward_did: String,
+    pub zcap_delegation_capability_ids: Vec<String>,
+    pub local_lan_or_qdnf_endpoint: String,
+    pub has_gpu_display: bool,
+    pub cpu_softbuffer_fallback_armed: bool,
+    pub active_signage_hmc_digest: Option<String>,
+    pub active_signage_qecp_verified: bool,
+    pub last_bus_command_receipt: String,
+    pub foreign_cloud_and_crypto_blocked: bool,
+    pub sealed_nquin_parity: u64,
 }
 
 /// The Four Human-Centric Stewardship & Agency Archetypes (`webizen-host-stewardship` WP-05).
@@ -311,14 +415,23 @@ pub enum HostNodeLocusKind {
     OnlineCloudVpsRelay,
     /// **Community Grounds / Regional Microgrid Edge Node** (Shared regional cooperative server).
     CommunityGroundsEdgeNode,
+    /// **Second-OS / WSL2 / Lima Subsystem Steward Node** (Laptop guest Debian `ext4.vhdx` Sanctuary).
+    SecondOsSubsystemLocus,
+    /// **Paired headless IoT / robotics / home-automation instrument** (never a NaturalAgent peer).
+    PairedIotHeadlessInstrument,
+    /// **Paired GPU shop-display / kiosk appliance** (QECP `collect != activate`).
+    PairedIotDisplaySignageAppliance,
 }
 
 impl HostNodeLocusKind {
-    pub const ALL: [Self; 4] = [
+    pub const ALL: [Self; 7] = [
         Self::HomeServerAppliance,
         Self::CamperMobileRigNode,
         Self::OnlineCloudVpsRelay,
         Self::CommunityGroundsEdgeNode,
+        Self::SecondOsSubsystemLocus,
+        Self::PairedIotHeadlessInstrument,
+        Self::PairedIotDisplaySignageAppliance,
     ];
 
     pub const fn code(self) -> &'static str {
@@ -327,6 +440,9 @@ impl HostNodeLocusKind {
             Self::CamperMobileRigNode => "camper_mobile_rig",
             Self::OnlineCloudVpsRelay => "online_cloud_vps",
             Self::CommunityGroundsEdgeNode => "community_grounds_edge",
+            Self::SecondOsSubsystemLocus => "wsl2_second_os",
+            Self::PairedIotHeadlessInstrument => "iot_headless_instrument",
+            Self::PairedIotDisplaySignageAppliance => "iot_display_signage",
         }
     }
 
@@ -342,6 +458,15 @@ impl HostNodeLocusKind {
                 "Online Cloud VPS Anchor (Always-On Ingress & Shamir .q42j Mirror)"
             }
             Self::CommunityGroundsEdgeNode => "Community Grounds / Regional Microgrid Edge Host",
+            Self::SecondOsSubsystemLocus => {
+                "WSL2 / Lima Second-OS Sanctuary Appliance (ext4.vhdx Mount Guard)"
+            }
+            Self::PairedIotHeadlessInstrument => {
+                "Paired IoT Headless Instrument (Robotics / Home Automation)"
+            }
+            Self::PairedIotDisplaySignageAppliance => {
+                "Paired IoT Display Signage Kiosk (QECP collect != activate)"
+            }
         }
     }
 
@@ -358,6 +483,15 @@ impl HostNodeLocusKind {
             }
             Self::CommunityGroundsEdgeNode => {
                 "Regional cooperative microgrid & Q-CDN Tier-A/B seeder governed by M-of-N community co-stewards."
+            }
+            Self::SecondOsSubsystemLocus => {
+                "WSL2 / Lima mirrored LAN (networkingMode=mirrored) with Sanctuary vaults confined to isolated ext4.vhdx; /mnt/c, 9p, drvfs, virtiofs rejected."
+            }
+            Self::PairedIotHeadlessInstrument => {
+                "Local GPIO/PWM/CAN/I2C instrument bus under parent-host pairing; zero vendor cloud, zero foreign crypto."
+            }
+            Self::PairedIotDisplaySignageAppliance => {
+                "Local GPU/kiosk signage playlist bus; QECP collect != activate; zero vendor cloud, zero foreign crypto."
             }
         }
     }
@@ -873,6 +1007,9 @@ pub struct NaturalHostStewardshipFabric {
     /// Auditable stream of dispatched Guardianship & Remote Carer Alerts (recorded in the Accountability Ledger).
     #[serde(default)]
     pub care_alerts: Vec<DispatchedCareAndGuardianAlert>,
+    /// Locally paired IoT / robotics / home-automation / shop-signage instruments (governed tools, never NaturalAgent peers).
+    #[serde(default)]
+    pub paired_iot_instruments: Vec<PairedIotEdgeInstrumentRecord>,
 }
 
 impl Default for NaturalHostStewardshipFabric {
@@ -906,15 +1043,29 @@ impl NaturalHostStewardshipFabric {
                     if loaded.care_alerts.is_empty() {
                         loaded.care_alerts = defaults.care_alerts;
                     }
+                    if loaded.paired_iot_instruments.is_empty() {
+                        loaded.paired_iot_instruments = defaults.paired_iot_instruments;
+                    }
                     return loaded;
                 }
             }
         }
         let mut seeded = default_seeded_host_stewardship();
         if !ids.fabric_did.is_empty() {
+            let previous_principal = seeded
+                .stewards
+                .first()
+                .map(|steward| steward.steward_did.clone());
             if let Some(first) = seeded.stewards.first_mut() {
                 first.steward_did = ids.fabric_did.clone();
                 first.steward_did_hash = q_hash_60(&ids.fabric_did);
+            }
+            if let Some(previous) = previous_principal {
+                for instrument in &mut seeded.paired_iot_instruments {
+                    if instrument.authorizing_steward_did == previous {
+                        instrument.authorizing_steward_did = ids.fabric_did.clone();
+                    }
+                }
             }
         }
         let _ = seeded.save(storage);
@@ -1294,15 +1445,24 @@ impl NaturalHostStewardshipFabric {
         );
         let holds_local_sanctuary_keep = matches!(
             locus,
-            HostNodeLocusKind::HomeServerAppliance | HostNodeLocusKind::CamperMobileRigNode
+            HostNodeLocusKind::HomeServerAppliance
+                | HostNodeLocusKind::CamperMobileRigNode
+                | HostNodeLocusKind::SecondOsSubsystemLocus
         );
         let qcdn_seeder_tier = match locus {
             HostNodeLocusKind::HomeServerAppliance | HostNodeLocusKind::CamperMobileRigNode => {
                 "Tier B · Personal/Roaming Seeder (:4242 + Local LAN/Mesh)".into()
             }
+            HostNodeLocusKind::SecondOsSubsystemLocus => {
+                "Tier B · Second-OS Subsystem Steward Seeder (WSL2/Lima mirrored LAN)".into()
+            }
             HostNodeLocusKind::OnlineCloudVpsRelay
             | HostNodeLocusKind::CommunityGroundsEdgeNode => {
                 "Tier A · Cooperative VPS / Edge Mirror (:4242 SignedRootIndex)".into()
+            }
+            HostNodeLocusKind::PairedIotHeadlessInstrument
+            | HostNodeLocusKind::PairedIotDisplaySignageAppliance => {
+                "Tier C · Local Paired Instrument (zero vendor cloud, zero foreign crypto)".into()
             }
         };
 
@@ -1828,16 +1988,290 @@ impl NaturalHostStewardshipFabric {
         }
         Ok(updated)
     }
+
+    /// Pair a local IoT / robotics / home-automation / shop-signage instrument to a parent host.
+    ///
+    /// Fails closed unless `steward_did` is a registered NaturalAgent with legal capacity, the
+    /// instrument DID is on the Instrument plane (`did:q42:instrument:` / `did:qi:instrument:`),
+    /// the DID is never registered as a peer NaturalAgent, and the parent node is in the local fleet.
+    pub fn pair_local_iot_instrument(
+        &mut self,
+        storage_root: &Path,
+        instrument_did: &str,
+        label: &str,
+        role: PairedIotDeviceRoleKind,
+        arch: &str,
+        parent_node_id: &str,
+        steward_did: &str,
+        endpoint: &str,
+    ) -> Result<PairedIotEdgeInstrumentRecord, String> {
+        validate_host_field(instrument_did, "Instrument DID")?;
+        validate_host_field(label, "Instrument label")?;
+        validate_host_field(arch, "Instrument architecture")?;
+        validate_host_field(parent_node_id, "Parent host node")?;
+        validate_host_field(steward_did, "Authorizing steward DID")?;
+        validate_host_field(endpoint, "Instrument endpoint")?;
+
+        let instrument_did = instrument_did.trim();
+        if !(instrument_did.starts_with("did:q42:instrument:")
+            || instrument_did.starts_with("did:qi:instrument:"))
+        {
+            return Err(
+                "Instrument DID must start with did:q42:instrument: or did:qi:instrument: (instruments are not peers)"
+                    .into(),
+            );
+        }
+        if self
+            .stewards
+            .iter()
+            .any(|steward| steward.steward_did == instrument_did)
+        {
+            return Err(
+                "Anti-Collapse Invariant: an instrument DID cannot be registered as a NaturalAgent peer"
+                    .into(),
+            );
+        }
+        let steward = self
+            .stewards
+            .iter()
+            .find(|s| s.steward_did == steward_did.trim())
+            .ok_or_else(|| {
+                "Authorizing steward must be a registered NaturalAgent on this host fabric".to_string()
+            })?;
+        if !steward.has_full_legal_capacity {
+            return Err(
+                "Authorizing steward must have legal capacity (supported dependents require a guardian co-signature)"
+                    .into(),
+            );
+        }
+        if !self
+            .host_fleet_nodes
+            .iter()
+            .any(|node| node.node_id == parent_node_id.trim())
+        {
+            return Err("Parent host node is not an active local fleet node".into());
+        }
+
+        let debian_profile = role.debian_profile();
+        let has_gpu_display = matches!(role, PairedIotDeviceRoleKind::RetailDisplaySignageKiosk);
+        let quin = NQuin48::invariant(
+            &self.primary_host_domain,
+            "https://ns.webcivics.net/iot#pairLocalInstrumentWithStewardHost",
+            q_hash_60(instrument_did),
+        );
+        debug_assert!(quin.verify_parity());
+        debug_assert_eq!(core::mem::size_of_val(&quin), 48);
+
+        let record = PairedIotEdgeInstrumentRecord {
+            instrument_did: instrument_did.to_string(),
+            label: label.trim().to_string(),
+            role,
+            debian_profile,
+            architecture: arch.trim().to_string(),
+            paired_parent_node_id: parent_node_id.trim().to_string(),
+            authorizing_steward_did: steward_did.trim().to_string(),
+            zcap_delegation_capability_ids: role.zcap_capability_ids(),
+            local_lan_or_qdnf_endpoint: endpoint.trim().to_string(),
+            has_gpu_display,
+            cpu_softbuffer_fallback_armed: has_gpu_display,
+            active_signage_hmc_digest: None,
+            active_signage_qecp_verified: false,
+            last_bus_command_receipt: String::new(),
+            foreign_cloud_and_crypto_blocked: true,
+            sealed_nquin_parity: quin.parity(),
+        };
+        self.paired_iot_instruments
+            .retain(|existing| existing.instrument_did != record.instrument_did);
+        self.paired_iot_instruments.push(record.clone());
+        self.save(storage_root)?;
+        Ok(record)
+    }
+
+    /// Execute a local GPIO/PWM/CAN/I2C (or related) bus command on a paired headless instrument.
+    ///
+    /// Requires an active parent-host pairing, `IoTActuator.command_bus` grant, and
+    /// `foreign_cloud_and_crypto_blocked == true`. Mints a 48-byte `NQuin48` actuation receipt.
+    pub fn execute_local_iot_bus_command(
+        &mut self,
+        storage_root: &Path,
+        instrument_did: &str,
+        bus_kind: &str,
+        command_summary: &str,
+    ) -> Result<PairedIotEdgeInstrumentRecord, String> {
+        validate_host_field(instrument_did, "Instrument DID")?;
+        validate_host_field(bus_kind, "Bus kind")?;
+        validate_host_field(command_summary, "Bus command")?;
+
+        let index = self
+            .paired_iot_instruments
+            .iter()
+            .position(|record| record.instrument_did == instrument_did.trim())
+            .ok_or_else(|| "Instrument is not paired to this local host fabric".to_string())?;
+        let parent_id = self.paired_iot_instruments[index]
+            .paired_parent_node_id
+            .clone();
+        if !self
+            .host_fleet_nodes
+            .iter()
+            .any(|node| node.node_id == parent_id)
+        {
+            return Err("Active local parent-host pairing is required before bus actuation".into());
+        }
+        if !self.paired_iot_instruments[index]
+            .zcap_delegation_capability_ids
+            .iter()
+            .any(|cap| cap == "IoTActuator.command_bus")
+        {
+            return Err("IoTActuator.command_bus grant is required for local bus actuation".into());
+        }
+        if !self.paired_iot_instruments[index].foreign_cloud_and_crypto_blocked {
+            return Err(
+                "Local IoT bus commands require foreign_cloud_and_crypto_blocked == true".into(),
+            );
+        }
+
+        let quin = NQuin48::invariant(
+            &self.primary_host_domain,
+            "https://ns.webcivics.net/iot#executeLocalActuatorBusCommand",
+            q_hash_60(&format!(
+                "{}:{}:{}",
+                instrument_did.trim(),
+                bus_kind.trim(),
+                command_summary.trim()
+            )),
+        );
+        debug_assert!(quin.verify_parity());
+        debug_assert_eq!(core::mem::size_of_val(&quin), 48);
+        let receipt_hex = nquin48_receipt_hex(&quin);
+        debug_assert_eq!(receipt_hex.len(), 96);
+
+        let record = &mut self.paired_iot_instruments[index];
+        record.last_bus_command_receipt = format!(
+            "nquin48:{receipt_hex} bus={} cmd={}",
+            bus_kind.trim(),
+            command_summary.trim()
+        );
+        record.sealed_nquin_parity = quin.parity();
+        let updated = record.clone();
+        self.save(storage_root)?;
+        Ok(updated)
+    }
+
+    /// Activate a QECP-signed `.hmc` / `.10d` shop-display playlist (`collect != activate`).
+    ///
+    /// Fails closed on `IotHeadlessInstrumentNode`, when `has_gpu_display` is false, when the
+    /// QECP signature is empty, or when the collecting URI equals the activation signature.
+    pub fn activate_iot_display_signage_hmc(
+        &mut self,
+        storage_root: &Path,
+        instrument_did: &str,
+        hmc_bundle_uri: &str,
+        qecp_sig_hex: &str,
+        steward_did: &str,
+    ) -> Result<PairedIotEdgeInstrumentRecord, String> {
+        validate_host_field(instrument_did, "Instrument DID")?;
+        validate_host_field(hmc_bundle_uri, "HMC bundle URI")?;
+        validate_host_field(qecp_sig_hex, "QECP signature")?;
+        validate_host_field(steward_did, "Authorizing steward DID")?;
+
+        let index = self
+            .paired_iot_instruments
+            .iter()
+            .position(|record| record.instrument_did == instrument_did.trim())
+            .ok_or_else(|| "Instrument is not paired to this local host fabric".to_string())?;
+        let record = &self.paired_iot_instruments[index];
+        if record.debian_profile == DebianTargetProfile::IotHeadlessInstrumentNode
+            || matches!(
+                record.role,
+                PairedIotDeviceRoleKind::RoboticsActuatorController
+                    | PairedIotDeviceRoleKind::HomeAutomationSensorHub
+            )
+        {
+            return Err(
+                "Signage activation fails closed on IotHeadlessInstrumentNode (no GPU display, collect != activate)"
+                    .into(),
+            );
+        }
+        if !record.has_gpu_display
+            || record.role != PairedIotDeviceRoleKind::RetailDisplaySignageKiosk
+        {
+            return Err(
+                "IoTSignage.present_verified_hmc requires a GPU-equipped RetailDisplaySignageKiosk"
+                    .into(),
+            );
+        }
+        if qecp_sig_hex.trim().is_empty() {
+            return Err("QECP signature must be nonempty (collect != activate)".into());
+        }
+        if hmc_bundle_uri.trim() == qecp_sig_hex.trim() {
+            return Err(
+                "collect != activate: QECP activation signature must be distinct from the collected .hmc URI"
+                    .into(),
+            );
+        }
+        let steward_ok = record.authorizing_steward_did == steward_did.trim()
+            || self.stewards.iter().any(|s| {
+                s.steward_did == steward_did.trim() && s.has_full_legal_capacity
+            });
+        if !steward_ok {
+            return Err(
+                "QECP signage activation requires an authorized NaturalAgent steward with legal capacity"
+                    .into(),
+            );
+        }
+        if !record
+            .zcap_delegation_capability_ids
+            .iter()
+            .any(|cap| cap == "IoTSignage.present_verified_hmc")
+        {
+            return Err("IoTSignage.present_verified_hmc grant is required".into());
+        }
+
+        let quin = NQuin48::invariant(
+            &self.primary_host_domain,
+            "https://ns.webcivics.net/iot#activateVerifiedSignageHmc",
+            q_hash_60(&format!(
+                "{}:{}:{}",
+                instrument_did.trim(),
+                hmc_bundle_uri.trim(),
+                qecp_sig_hex.trim()
+            )),
+        );
+        debug_assert!(quin.verify_parity());
+        debug_assert_eq!(core::mem::size_of_val(&quin), 48);
+
+        let record = &mut self.paired_iot_instruments[index];
+        record.active_signage_hmc_digest = Some(hmc_bundle_uri.trim().to_string());
+        record.active_signage_qecp_verified = true;
+        record.sealed_nquin_parity = quin.parity();
+        let updated = record.clone();
+        self.save(storage_root)?;
+        Ok(updated)
+    }
 }
 
-/// Receipt emitted by [`generate_tri_target_debian_suite`] producing the unified Debian 13 (Trixie)
-/// `.deb` package trees for Desktop (`amd64`), Mobile AVF Sanctuary (`arm64`), and Host (`amd64`/`arm64`).
+fn nquin48_receipt_hex(quin: &NQuin48) -> String {
+    let mut bytes = [0u8; 48];
+    for (index, word) in quin.0.iter().enumerate() {
+        bytes[index * 8..(index + 1) * 8].copy_from_slice(&word.to_le_bytes());
+    }
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+/// Receipt emitted by [`generate_tri_target_debian_suite`] producing the unified six-target
+/// Debian 12/13 (Bookworm + Trixie) `.deb` package trees (`libc6 >= 2.36`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TriTargetDebianSuiteReceipt {
     pub suite_root_dir: PathBuf,
     pub desktop_deb_tree: PathBuf,
     pub mobile_avf_deb_tree: PathBuf,
     pub host_deb_tree: PathBuf,
+    #[serde(default)]
+    pub subsystem_wsl_deb_tree: PathBuf,
+    #[serde(default)]
+    pub iot_headless_deb_tree: PathBuf,
+    #[serde(default)]
+    pub iot_display_deb_tree: PathBuf,
     #[serde(default)]
     pub built_deb_packages: Vec<crate::deb_builder::DebBuildReceipt>,
     #[serde(default)]
@@ -1907,6 +2341,9 @@ pub fn generate_tri_target_debian_suite(
     let desktop_tree = suite_root.join("webizen-desktop-appliance_0.1.0_amd64");
     let mobile_tree = suite_root.join("webizen-mobile-avf_0.1.0_arm64");
     let host_tree = suite_root.join("webizen-hostd_0.1.0_amd64");
+    let subsystem_tree = suite_root.join("webizen-subsystem-wsl_0.1.0_amd64");
+    let iot_headless_tree = suite_root.join("webizen-iot-headless_0.1.0_arm64");
+    let iot_display_tree = suite_root.join("webizen-iot-display_0.1.0_arm64");
 
     // 1. Target 1 — Desktop Steward & Authoring Node (`webizen-desktop-appliance_0.1.0_amd64`)
     fs::create_dir_all(desktop_tree.join("DEBIAN")).map_err(|e| e.to_string())?;
@@ -1932,7 +2369,7 @@ pub fn generate_tri_target_debian_suite(
          Section: x11\n\
          Priority: optional\n\
          Architecture: amd64\n\
-         Depends: libc6 (>= 2.38), systemd, cage, libvulkan1, mesa-vulkan-drivers, nftables, ca-certificates\n\
+         Depends: libc6 (>= 2.36), systemd, cage, libvulkan1, mesa-vulkan-drivers, nftables, ca-certificates\n\
          Recommends: webizen-hostd\n\
          Maintainer: Webizen Human-Centric Stewardship <steward@{domain}>\n\
          Description: Webizen User-Agent OS Desktop Steward & Authoring Environment (Debian 13 Trixie)\n\
@@ -1964,7 +2401,7 @@ systemctl daemon-reload || true
          Section: utils\n\
          Priority: optional\n\
          Architecture: arm64\n\
-         Depends: libc6 (>= 2.38), systemd, libvulkan1, mesa-vulkan-drivers, wireguard-tools, ca-certificates\n\
+         Depends: libc6 (>= 2.36), systemd, libvulkan1, mesa-vulkan-drivers, wireguard-tools, ca-certificates\n\
          Maintainer: Webizen Human-Centric Stewardship <steward@{domain}>\n\
          Description: Webizen Mobile Pocket Sanctuary & Host Quorum Co-Signer (Debian 13 Trixie arm64 / Android 16 AVF pKVM EL2)\n\
          \x20Staged profile for Debian 13 arm64 on Android AVF or native Mobian.\n\
@@ -2035,7 +2472,7 @@ WantedBy=multi-user.target
          Section: net\n\
          Priority: optional\n\
          Architecture: amd64\n\
-         Depends: libc6 (>= 2.38), systemd, nftables, caddy, wireguard-tools, ca-certificates\n\
+         Depends: libc6 (>= 2.36), systemd, nftables, caddy, wireguard-tools, ca-certificates\n\
          Maintainer: Webizen Human-Centric Stewardship <steward@{domain}>\n\
          Description: Webizen & QualiaDB Human-Centric Linux Host Platform (Debian 13 Trixie)\n\
          \x20Staged configuration for {domain} and the headless Webizen host runtime.\n\
@@ -2063,21 +2500,177 @@ WantedBy=multi-user.target
     validate_human_centric_host_nomenclature(host_gate_script)?;
     fs::write(&host_quorum_gate_script_path, host_gate_script).map_err(|e| e.to_string())?;
 
-    // Master `build-tri-target-debs.sh` script that invokes `dpkg-deb --build` across all 3 targets
+    // 4. Target 4 — WSL2 / Lima Second-OS Sanctuary Appliance (`webizen-subsystem-wsl_0.1.0_amd64`)
+    fs::create_dir_all(subsystem_tree.join("DEBIAN")).map_err(|e| e.to_string())?;
+    fs::create_dir_all(subsystem_tree.join("opt/webizen/bin")).map_err(|e| e.to_string())?;
+    fs::create_dir_all(subsystem_tree.join("etc/wsl")).map_err(|e| e.to_string())?;
+    fs::create_dir_all(subsystem_tree.join("usr/local/bin")).map_err(|e| e.to_string())?;
+    fs::create_dir_all(subsystem_tree.join("lib/systemd/system")).map_err(|e| e.to_string())?;
+    let subsystem_control = format!(
+        "Package: webizen-subsystem-wsl\n\
+         Version: 0.1.0\n\
+         Section: utils\n\
+         Priority: optional\n\
+         Architecture: amd64\n\
+         Depends: libc6 (>= 2.36), systemd, mesa-vulkan-drivers, libvulkan1, libwayland-client0, libxkbcommon0, libfontconfig1, libpulse0, ca-certificates\n\
+         Maintainer: Webizen Human-Centric Stewardship <steward@{domain}>\n\
+         Description: Webizen Second-OS Sanctuary Appliance (WSL2 .wsl / macOS Lima)\n\
+         \x20Isolated ext4.vhdx Sanctuary Keep with mount guard rejecting /mnt/c, 9p, drvfs, virtiofs.\n\
+         \x20Mirrored LAN networking for local IoT / Raspberry Pi pairing. libc6 >= 2.36 Bookworm & Trixie.\n",
+        domain = stewardship.primary_host_domain,
+    );
+    validate_human_centric_host_nomenclature(&subsystem_control)?;
+    fs::write(subsystem_tree.join("DEBIAN/control"), &subsystem_control)
+        .map_err(|e| e.to_string())?;
+    let wsl_conf = "[boot]\nsystemd=true\n\n[automount]\nenabled=false\n\n[network]\ngenerateResolvConf=true\n";
+    validate_human_centric_host_nomenclature(wsl_conf)?;
+    fs::write(subsystem_tree.join("etc/wsl/wsl.conf"), wsl_conf).map_err(|e| e.to_string())?;
+    let sanctuary_guard = r#"#!/usr/bin/env bash
+set -euo pipefail
+# Webizen Sanctuary ext4.vhdx mount guard: reject host-cloud-sync filesystems.
+for forbidden in /mnt/c 9p drvfs virtiofs; do
+  if findmnt -n -o FSTYPE,TARGET | grep -F "$forbidden" >/dev/null 2>&1; then
+    echo "Sanctuary mount guard rejected host path or fstype: $forbidden" >&2
+    exit 78
+  fi
+done
+if [ -d /mnt/c ]; then
+  echo "Sanctuary mount guard rejected /mnt/c (Windows host drive)" >&2
+  exit 78
+fi
+install -d -m 0750 /var/lib/qualia/sanctuary
+"#;
+    validate_human_centric_host_nomenclature(sanctuary_guard)?;
+    fs::write(
+        subsystem_tree.join("usr/local/bin/sanctuary-mount-guard.sh"),
+        sanctuary_guard,
+    )
+    .map_err(|e| e.to_string())?;
+
+    // 5. Target 5 — Headless IoT / robotics / home-automation instrument (`webizen-iot-headless_0.1.0_arm64`)
+    fs::create_dir_all(iot_headless_tree.join("DEBIAN")).map_err(|e| e.to_string())?;
+    fs::create_dir_all(iot_headless_tree.join("opt/webizen/bin")).map_err(|e| e.to_string())?;
+    fs::create_dir_all(iot_headless_tree.join("etc/webizen")).map_err(|e| e.to_string())?;
+    fs::create_dir_all(iot_headless_tree.join("lib/systemd/system")).map_err(|e| e.to_string())?;
+    let iot_headless_control = format!(
+        "Package: webizen-iot-headless\n\
+         Version: 0.1.0\n\
+         Section: utils\n\
+         Priority: optional\n\
+         Architecture: arm64\n\
+         Depends: libc6 (>= 2.36)\n\
+         Recommends: libudev1, libdbus-1-3\n\
+         Maintainer: Webizen Human-Centric Stewardship <steward@{domain}>\n\
+         Description: Webizen Headless IoT / Robotics / Home-Automation Instrument Node\n\
+         \x20Zero GUI and Vulkan dependencies. Boots unpaired; local NaturalAgent steward pairing required.\n\
+         \x20GPIO/PWM/CAN/I2C actuation under IoTActuator.command_bus. libc6 >= 2.36 Bookworm, Trixie & Raspberry Pi OS.\n",
+        domain = stewardship.primary_host_domain,
+    );
+    validate_human_centric_host_nomenclature(&iot_headless_control)?;
+    fs::write(iot_headless_tree.join("DEBIAN/control"), &iot_headless_control)
+        .map_err(|e| e.to_string())?;
+    let iot_headless_service = r#"[Unit]
+Description=Webizen Headless IoT Instrument (Robotics / Home Automation)
+After=network-online.target
+Wants=network-online.target
+ConditionPathIsExecutable=/opt/webizen/bin/qualia-cli
+
+[Service]
+Type=simple
+User=qualiadb
+Group=qualiadb
+Environment=WEBIZEN_SKU=iot-headless
+Environment=QUALIA_STORAGE_PATH=/var/lib/qualiadb
+ExecStart=/opt/webizen/bin/qualia-cli daemon start --port 4242 --iot-headless
+Restart=always
+RestartSec=2
+MemoryMax=256M
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/qualiadb
+
+[Install]
+WantedBy=multi-user.target
+"#;
+    validate_human_centric_host_nomenclature(iot_headless_service)?;
+    fs::write(
+        iot_headless_tree.join("lib/systemd/system/webizen-iot-headless.service"),
+        iot_headless_service,
+    )
+    .map_err(|e| e.to_string())?;
+
+    // 6. Target 6 — GPU shop-display signage kiosk (`webizen-iot-display_0.1.0_arm64`)
+    fs::create_dir_all(iot_display_tree.join("DEBIAN")).map_err(|e| e.to_string())?;
+    fs::create_dir_all(iot_display_tree.join("opt/webizen/bin")).map_err(|e| e.to_string())?;
+    fs::create_dir_all(iot_display_tree.join("etc/webizen")).map_err(|e| e.to_string())?;
+    fs::create_dir_all(iot_display_tree.join("lib/systemd/system")).map_err(|e| e.to_string())?;
+    let iot_display_control = format!(
+        "Package: webizen-iot-display\n\
+         Version: 0.1.0\n\
+         Section: x11\n\
+         Priority: optional\n\
+         Architecture: arm64\n\
+         Depends: libc6 (>= 2.36), libvulkan1 | libgles2, libwayland-client0 | libdrm2, libxkbcommon0, libfontconfig1, libasound2\n\
+         Maintainer: Webizen Human-Centric Stewardship <steward@{domain}>\n\
+         Description: Webizen GPU Retail Shop Display Signage & Kiosk Node\n\
+         \x20Vulkan/GLES with vello-cpu-softbuffer fallback. QECP collect != activate for .hmc / .10d playlists.\n\
+         \x20libc6 >= 2.36 Bookworm, Trixie & Raspberry Pi OS compatible.\n",
+        domain = stewardship.primary_host_domain,
+    );
+    validate_human_centric_host_nomenclature(&iot_display_control)?;
+    fs::write(iot_display_tree.join("DEBIAN/control"), &iot_display_control)
+        .map_err(|e| e.to_string())?;
+    let iot_display_service = r#"[Unit]
+Description=Webizen GPU Shop Display Signage Kiosk
+After=network-online.target
+Wants=network-online.target
+ConditionPathIsExecutable=/opt/webizen/bin/qualia-cli
+
+[Service]
+Type=simple
+User=qualiadb
+Group=qualiadb
+Environment=WEBIZEN_SKU=iot-display
+Environment=QUALIA_STORAGE_PATH=/var/lib/qualiadb
+ExecStart=/opt/webizen/bin/qualia-cli daemon start --port 4242 --iot-display-kiosk
+Restart=always
+RestartSec=2
+MemoryMax=512M
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/qualiadb
+
+[Install]
+WantedBy=multi-user.target
+"#;
+    validate_human_centric_host_nomenclature(iot_display_service)?;
+    fs::write(
+        iot_display_tree.join("lib/systemd/system/webizen-iot-display.service"),
+        iot_display_service,
+    )
+    .map_err(|e| e.to_string())?;
+
+    // Master `build-tri-target-debs.sh` script that invokes `dpkg-deb --build` across all 6 targets
     let build_all_debs_script_path = suite_root.join("build-tri-target-debs.sh");
     let build_all_script = format!(
         "#!/usr/bin/env bash\n\
-         # Build the Unified Tri-Target Debian 13 (Trixie) .deb Suite for Human-Centric Host Stewardship\n\
-         # 1. webizen-desktop-appliance_0.1.0_amd64.deb (Desktop Steward & Authoring Node)\n\
-         # 2. webizen-mobile-avf_0.1.0_arm64.deb       (Android 16 AVF pKVM EL2 Pocket Sanctuary & Co-Signer)\n\
-         # 3. webizen-hostd_0.1.0_amd64.deb            (Human-Centric Linux Host Platform governed by Natural-Person Quorum)\n\
+         # Build the Unified Six-Target Debian Native .deb Suite (libc6 >= 2.36 Bookworm & Trixie)\n\
+         # 1. webizen-desktop-appliance_0.1.0_amd64.deb\n\
+         # 2. webizen-subsystem-wsl_0.1.0_amd64.deb\n\
+         # 3. webizen-mobile-avf_0.1.0_arm64.deb\n\
+         # 4. webizen-hostd_0.1.0_amd64.deb\n\
+         # 5. webizen-iot-headless_0.1.0_arm64.deb\n\
+         # 6. webizen-iot-display_0.1.0_arm64.deb\n\
          # Hardware Attestation Gate on this build host: {attested}\n\
          set -euo pipefail\n\
          DIR=\"$(cd \"$(dirname \"${{BASH_SOURCE[0]}}\")\" && pwd)\"\n\
          dpkg-deb --build \"$DIR/webizen-desktop-appliance_0.1.0_amd64\"\n\
+         dpkg-deb --build \"$DIR/webizen-subsystem-wsl_0.1.0_amd64\"\n\
          dpkg-deb --build \"$DIR/webizen-mobile-avf_0.1.0_arm64\"\n\
          dpkg-deb --build \"$DIR/webizen-hostd_0.1.0_amd64\"\n\
-         echo \"Built all 3 Debian 13 Trixie packages in $DIR\"\n",
+         dpkg-deb --build \"$DIR/webizen-iot-headless_0.1.0_arm64\"\n\
+         dpkg-deb --build \"$DIR/webizen-iot-display_0.1.0_arm64\"\n\
+         echo \"Built all 6 Debian native packages (libc6 >= 2.36) in $DIR\"\n",
         attested = gpu.may_advertise_hardware_attested_vault,
     );
     validate_human_centric_host_nomenclature(&build_all_script)?;
@@ -2088,6 +2681,9 @@ WantedBy=multi-user.target
         desktop_deb_tree: desktop_tree,
         mobile_avf_deb_tree: mobile_tree,
         host_deb_tree: host_tree,
+        subsystem_wsl_deb_tree: subsystem_tree,
+        iot_headless_deb_tree: iot_headless_tree,
+        iot_display_deb_tree: iot_display_tree,
         built_deb_packages: Vec::new(),
         apt_repository: None,
         host_state_cbor_ld_path,
@@ -2132,6 +2728,15 @@ WantedBy=multi-user.target
         &eligible_stewards,
     )?);
     Ok(receipt)
+}
+
+/// Alias for [`generate_tri_target_debian_suite`] — the suite now stages all six Debian native profiles.
+pub fn generate_six_target_debian_suite(
+    host: &LoopbackHost,
+    gpu: &NativeEtalonStatus,
+    stewardship: &NaturalHostStewardshipFabric,
+) -> Result<TriTargetDebianSuiteReceipt, String> {
+    generate_tri_target_debian_suite(host, gpu, stewardship)
 }
 
 /// Encode `host_state.cbor-ld` with the W3C CBOR-LD tag header `[0xD9, 0x05, 0x01]` and trailing
@@ -2547,6 +3152,65 @@ fn default_seeded_host_stewardship() -> NaturalHostStewardshipFabric {
                 sealed_nquin_parity: q_hash_60("circle:sharehouse-peer-commons"),
             },
         ],
+        paired_iot_instruments: vec![
+            PairedIotEdgeInstrumentRecord {
+                instrument_did: "did:q42:instrument:rpi5-rover-robotics-arm".into(),
+                label: "Raspberry Pi 5 Rover Robotics Actuator Controller".into(),
+                role: PairedIotDeviceRoleKind::RoboticsActuatorController,
+                debian_profile: DebianTargetProfile::IotHeadlessInstrumentNode,
+                architecture: "arm64".into(),
+                paired_parent_node_id: "node:home-homestead-server".into(),
+                authorizing_steward_did: "did:qi:steward:desktop-principal".into(),
+                zcap_delegation_capability_ids: PairedIotDeviceRoleKind::RoboticsActuatorController
+                    .zcap_capability_ids(),
+                local_lan_or_qdnf_endpoint: "qpr://rpi5-rover.lan:4242".into(),
+                has_gpu_display: false,
+                cpu_softbuffer_fallback_armed: false,
+                active_signage_hmc_digest: None,
+                active_signage_qecp_verified: false,
+                last_bus_command_receipt: String::new(),
+                foreign_cloud_and_crypto_blocked: true,
+                sealed_nquin_parity: q_hash_60("did:q42:instrument:rpi5-rover-robotics-arm"),
+            },
+            PairedIotEdgeInstrumentRecord {
+                instrument_did: "did:q42:instrument:rpi-zero2w-homestead-automation".into(),
+                label: "Raspberry Pi Zero 2W Homestead Automation Hub".into(),
+                role: PairedIotDeviceRoleKind::HomeAutomationSensorHub,
+                debian_profile: DebianTargetProfile::IotHeadlessInstrumentNode,
+                architecture: "armhf".into(),
+                paired_parent_node_id: "node:home-homestead-server".into(),
+                authorizing_steward_did: "did:qi:steward:desktop-principal".into(),
+                zcap_delegation_capability_ids: PairedIotDeviceRoleKind::HomeAutomationSensorHub
+                    .zcap_capability_ids(),
+                local_lan_or_qdnf_endpoint: "qpr://rpi-zero2w-homestead.lan:4242".into(),
+                has_gpu_display: false,
+                cpu_softbuffer_fallback_armed: false,
+                active_signage_hmc_digest: None,
+                active_signage_qecp_verified: false,
+                last_bus_command_receipt: String::new(),
+                foreign_cloud_and_crypto_blocked: true,
+                sealed_nquin_parity: q_hash_60("did:q42:instrument:rpi-zero2w-homestead-automation"),
+            },
+            PairedIotEdgeInstrumentRecord {
+                instrument_did: "did:q42:instrument:rpi5-shopfront-holo-signage".into(),
+                label: "Raspberry Pi 5 Shopfront Holographic Display Signage Kiosk".into(),
+                role: PairedIotDeviceRoleKind::RetailDisplaySignageKiosk,
+                debian_profile: DebianTargetProfile::IotDisplaySignageNode,
+                architecture: "arm64".into(),
+                paired_parent_node_id: "node:home-homestead-server".into(),
+                authorizing_steward_did: "did:qi:steward:desktop-principal".into(),
+                zcap_delegation_capability_ids: PairedIotDeviceRoleKind::RetailDisplaySignageKiosk
+                    .zcap_capability_ids(),
+                local_lan_or_qdnf_endpoint: "qpr://rpi5-shopfront-holo.lan:4242".into(),
+                has_gpu_display: true,
+                cpu_softbuffer_fallback_armed: true,
+                active_signage_hmc_digest: None,
+                active_signage_qecp_verified: false,
+                last_bus_command_receipt: String::new(),
+                foreign_cloud_and_crypto_blocked: true,
+                sealed_nquin_parity: q_hash_60("did:q42:instrument:rpi5-shopfront-holo-signage"),
+            },
+        ],
         care_alerts: vec![
             DispatchedCareAndGuardianAlert {
                 alert_id: "alert:circle:elderly-home-remote-carers:2:seed1".into(),
@@ -2810,7 +3474,7 @@ mod tests {
         assert!(collapse_msg.contains("Handle revoke != who-erase"));
         assert_eq!(fabric.stewards.len(), 4);
 
-        // 10. Generate the Tri-Target Debian 13 Trixie .deb Suite (Desktop amd64 + Mobile AVF arm64 + Host amd64)
+        // 10. Generate the Six-Target Debian native .deb Suite (libc6 >= 2.36 Bookworm & Trixie)
         let delivery = host.storage.join("delivery");
         fs::create_dir_all(&delivery).unwrap();
         let build_lock = fs::OpenOptions::new()
@@ -2826,7 +3490,29 @@ mod tests {
         drop(build_lock);
 
         let suite = generate_tri_target_debian_suite(&host, &gpu, &fabric)
-            .expect("generate tri-target debian suite");
+            .expect("generate six-target debian suite");
+        assert_eq!(DebianTargetProfile::ALL.len(), 6);
+        assert_eq!(suite.built_deb_packages.len(), 6);
+        for tree in [
+            &suite.desktop_deb_tree,
+            &suite.subsystem_wsl_deb_tree,
+            &suite.mobile_avf_deb_tree,
+            &suite.host_deb_tree,
+            &suite.iot_headless_deb_tree,
+            &suite.iot_display_deb_tree,
+        ] {
+            let control = fs::read_to_string(tree.join("DEBIAN/control")).expect("control");
+            assert!(
+                control.contains("libc6 (>= 2.36)"),
+                "{} missing libc6 (>= 2.36)",
+                tree.display()
+            );
+            assert!(
+                !control.contains("libc6 (>= 2.38)"),
+                "{} still pins glibc 2.38",
+                tree.display()
+            );
+        }
         assert!(suite.desktop_deb_tree.join("DEBIAN/control").is_file());
         assert!(suite.mobile_avf_deb_tree.join("DEBIAN/control").is_file());
         assert!(suite.host_deb_tree.join("DEBIAN/control").is_file());
@@ -2834,6 +3520,10 @@ mod tests {
         assert!(suite.host_quorum_gate_script_path.is_file());
         assert!(suite.avf_crosvm_launcher_path.is_file());
         assert!(suite.build_all_debs_script_path.is_file());
+        assert!(suite
+            .subsystem_wsl_deb_tree
+            .join("usr/local/bin/sanctuary-mount-guard.sh")
+            .is_file());
 
         let cbor_raw = fs::read(&suite.host_state_cbor_ld_path).unwrap();
         assert_eq!(&cbor_raw[0..3], &CBOR_LD_TAG_HEADER);
@@ -3006,6 +3696,150 @@ mod tests {
             .expect("child flagged ingest notification");
         assert_eq!(child_alert.notified_remote_guardian_dids.len(), 1);
         assert!(child_alert.notified_remote_guardian_dids[0].contains("Parent A"));
+
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn six_target_debs_and_local_iot_pairing_bus_and_fail_closed_signage() {
+        let tmp = std::env::temp_dir().join(format!(
+            "wz-iot-six-target-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = fs::remove_dir_all(&tmp);
+        fs::create_dir_all(&tmp).unwrap();
+
+        let host = LoopbackHost {
+            daemon_base: "http://127.0.0.1:4242".into(),
+            port: 4242,
+            storage: tmp.clone(),
+            install_root: tmp.clone(),
+            trust: TrustRoots::for_storage(&tmp),
+        };
+        let gpu = probe_native_etalon(&tmp);
+        let os_env = OsEnvironment::probe("steward");
+        let ids = enumerate_session_identifiers(&host, Sku::Appliance, &os_env, &gpu);
+        let mut fabric = NaturalHostStewardshipFabric::load_or_seed(&tmp, &ids);
+        assert_eq!(fabric.paired_iot_instruments.len(), 3);
+        assert!(fabric
+            .paired_iot_instruments
+            .iter()
+            .all(|instrument| instrument.foreign_cloud_and_crypto_blocked));
+        let desktop_did = fabric.stewards[0].steward_did.clone();
+
+        let suite = generate_six_target_debian_suite(&host, &gpu, &fabric)
+            .expect("six-target debian suite");
+        assert_eq!(suite.built_deb_packages.len(), 6);
+        for profile in DebianTargetProfile::ALL {
+            let tree_name = format!(
+                "{}_0.1.0_{}",
+                profile.deb_package_name(),
+                profile.architecture()
+            );
+            let control = fs::read_to_string(
+                suite
+                    .suite_root_dir
+                    .join(&tree_name)
+                    .join("DEBIAN/control"),
+            )
+            .unwrap_or_else(|_| panic!("missing control for {tree_name}"));
+            assert!(control.contains(profile.libc6_depends()));
+            assert!(control.contains(&format!("Package: {}", profile.deb_package_name())));
+            assert!(control.contains(&format!("Architecture: {}", profile.architecture())));
+        }
+
+        assert!(fabric
+            .pair_local_iot_instrument(
+                &tmp,
+                "did:qi:steward:desktop-principal",
+                "Illegal peer NaturalAgent",
+                PairedIotDeviceRoleKind::RoboticsActuatorController,
+                "arm64",
+                "node:home-homestead-server",
+                "did:qi:steward:desktop-principal",
+                "qpr://illegal.lan:4242",
+            )
+            .is_err());
+        assert!(fabric
+            .pair_local_iot_instrument(
+                &tmp,
+                "did:q42:instrument:unpaired-bot",
+                "Unpaired bot",
+                PairedIotDeviceRoleKind::RoboticsActuatorController,
+                "arm64",
+                "node:home-homestead-server",
+                "did:qi:family:supported-youth-member",
+                "qpr://youth.lan:4242",
+            )
+            .is_err());
+
+        let paired = fabric
+            .pair_local_iot_instrument(
+                &tmp,
+                "did:q42:instrument:rpi5-field-rover-extra",
+                "Field rover extra actuator",
+                PairedIotDeviceRoleKind::RoboticsActuatorController,
+                "arm64",
+                "node:home-homestead-server",
+                &desktop_did,
+                "qpr://rpi5-field-rover.lan:4242",
+            )
+            .expect("pair local robotics instrument");
+        assert!(paired.foreign_cloud_and_crypto_blocked);
+        assert_eq!(
+            paired.debian_profile,
+            DebianTargetProfile::IotHeadlessInstrumentNode
+        );
+        assert!(paired
+            .zcap_delegation_capability_ids
+            .contains(&"IoTActuator.command_bus".to_string()));
+
+        let actuated = fabric
+            .execute_local_iot_bus_command(
+                &tmp,
+                "did:q42:instrument:rpi5-rover-robotics-arm",
+                "gpio-pwm",
+                "set-wheel-duty 42",
+            )
+            .expect("local robotics bus command");
+        assert!(actuated.last_bus_command_receipt.contains("nquin48:"));
+        assert!(actuated.last_bus_command_receipt.contains("gpio-pwm"));
+        let receipt_hex = actuated
+            .last_bus_command_receipt
+            .strip_prefix("nquin48:")
+            .and_then(|rest| rest.split_whitespace().next())
+            .unwrap_or("");
+        assert_eq!(receipt_hex.len(), 96);
+
+        assert!(fabric
+            .activate_iot_display_signage_hmc(
+                &tmp,
+                "did:q42:instrument:rpi5-rover-robotics-arm",
+                "sanctuary://signage/shopfront.hmc",
+                "qecp-sig-deadbeef",
+                &desktop_did,
+            )
+            .is_err());
+
+        let signage = fabric
+            .activate_iot_display_signage_hmc(
+                &tmp,
+                "did:q42:instrument:rpi5-shopfront-holo-signage",
+                "sanctuary://signage/shopfront.hmc",
+                "qecp-sig-deadbeefcafef00d",
+                &desktop_did,
+            )
+            .expect("activate GPU signage playlist");
+        assert!(signage.has_gpu_display);
+        assert!(signage.active_signage_qecp_verified);
+        assert_eq!(
+            signage.active_signage_hmc_digest.as_deref(),
+            Some("sanctuary://signage/shopfront.hmc")
+        );
 
         let _ = fs::remove_dir_all(&tmp);
     }

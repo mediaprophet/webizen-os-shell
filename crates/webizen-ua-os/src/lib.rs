@@ -100,11 +100,12 @@ pub use host_daemon_runtime::{
     PublicP64TokenOutput, HOSTD_USAGE,
 };
 pub use host_stewardship::{
-    generate_tri_target_debian_suite, validate_human_centric_host_nomenclature,
-    ActorJuralPersonalityKind, CareAlertSeverity, CareAlertTriggerKind, DebianTargetProfile,
-    DispatchedCareAndGuardianAlert, HostNodeLocusKind, HostStewardshipArchetype,
-    HostUpdateProposal, HostedProjectOwnershipStage, HostedProjectWorkload,
-    IncorporatedEntityPricingTier, IncorporatedLegalEntityRecord, NaturalHostStewardshipFabric,
+    generate_six_target_debian_suite, generate_tri_target_debian_suite,
+    validate_human_centric_host_nomenclature, ActorJuralPersonalityKind, CareAlertSeverity,
+    CareAlertTriggerKind, DebianTargetProfile, DispatchedCareAndGuardianAlert, HostNodeLocusKind,
+    HostStewardshipArchetype, HostUpdateProposal, HostedProjectOwnershipStage,
+    HostedProjectWorkload, IncorporatedEntityPricingTier, IncorporatedLegalEntityRecord,
+    NaturalHostStewardshipFabric, PairedIotDeviceRoleKind, PairedIotEdgeInstrumentRecord,
     PersonalHostNode, ResponsibleNaturalSteward, SharedGuardianshipAndCareCircle,
     SharedLivingAndCareTopologyKind, SharedSystemParticipant, StewardQuorumVote,
     TriTargetDebianSuiteReceipt, CBOR_LD_TAG_HEADER, HOST_QUORUM_QUEUE_SLOTS,
